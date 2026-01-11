@@ -13,6 +13,8 @@ from openmm import openmm, unit
 
 from graphrelax.config import RelaxConfig
 
+logger = logging.getLogger(__name__)
+
 # Add vendored LigandMPNN to path for OpenFold imports
 # Must happen before importing from openfold
 LIGANDMPNN_PATH = Path(__file__).parent / "LigandMPNN"
@@ -21,8 +23,6 @@ if str(LIGANDMPNN_PATH) not in sys.path:
 
 from openfold.np import protein  # noqa: E402
 from openfold.np.relax.relax import AmberRelaxation  # noqa: E402
-
-logger = logging.getLogger(__name__)
 
 
 class Relaxer:
