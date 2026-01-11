@@ -4,9 +4,33 @@ These tests require both LigandMPNN and OpenMM to be installed.
 They test the full pipeline workflow.
 """
 
+from pathlib import Path
+
 import pytest
 
-from graphrelax.config import PipelineConfig, PipelineMode, RelaxConfig
+from graphrelax.config import (
+    DesignConfig,
+    PipelineConfig,
+    PipelineMode,
+    RelaxConfig,
+)
+
+
+def weights_available():
+    """Check if LigandMPNN weights are available."""
+    weights_dir = (
+        Path(__file__).parent.parent
+        / "src"
+        / "graphrelax"
+        / "LigandMPNN"
+        / "model_params"
+    )
+    required_weights = [
+        "proteinmpnn_v_48_020.pt",
+        "ligandmpnn_v_32_010_25.pt",
+    ]
+    return all((weights_dir / w).exists() for w in required_weights)
+
 
 # Skip entire module if OpenMM not available
 pytest.importorskip("openmm")
@@ -490,3 +514,361 @@ class TestPipelineWithLigand:
         rmsd = result["outputs"][0]["iterations"][0]["relax_info"]["rmsd"]
         # RMSD should be small with restraints
         assert rmsd < 2.0  # Less than 2 Angstrom
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    not weights_available(),
+    reason="LigandMPNN weights not downloaded",
+)
+class TestPipelineDesignMode:
+    """
+    Tests for DESIGN mode (full sequence redesign + relaxation).
+
+    These tests require LigandMPNN weights to be available.
+    """
+
+    def test_design_mode_completes(self, small_peptide_pdb, tmp_path):
+        """Test that DESIGN mode completes successfully."""
+        from graphrelax.pipeline import Pipeline
+
+        config = PipelineConfig(
+            mode=PipelineMode.DESIGN,
+            n_iterations=1,
+            n_outputs=1,
+            design=DesignConfig(
+                model_type="ligand_mpnn",
+                temperature=0.1,
+                seed=42,
+            ),
+            relax=RelaxConfig(max_iterations=50, stiffness=10.0),
+        )
+        pipeline = Pipeline(config)
+
+        output_pdb = tmp_path / "designed.pdb"
+        result = pipeline.run(
+            input_pdb=small_peptide_pdb,
+            output_pdb=output_pdb,
+        )
+
+        assert result is not None
+        assert len(result["outputs"]) == 1
+        assert output_pdb.exists()
+
+    def test_design_mode_changes_sequence(self, small_peptide_pdb, tmp_path):
+        """Test that DESIGN mode can change the sequence."""
+        from graphrelax.pipeline import Pipeline
+
+        config = PipelineConfig(
+            mode=PipelineMode.DESIGN,
+            n_iterations=1,
+            n_outputs=1,
+            design=DesignConfig(
+                model_type="ligand_mpnn",
+                temperature=0.5,  # Higher temp for more diversity
+                seed=42,
+            ),
+            relax=RelaxConfig(max_iterations=50, stiffness=10.0),
+        )
+        pipeline = Pipeline(config)
+
+        result = pipeline.run(
+            input_pdb=small_peptide_pdb,
+            output_pdb=tmp_path / "designed.pdb",
+        )
+
+        # Check that sequence info is returned
+        output = result["outputs"][0]
+        assert "sequence" in output
+        assert "native_sequence" in output
+
+        # Native sequence is all alanines
+        assert output["native_sequence"] == "AAAAA"
+
+    def test_design_mode_returns_scores(self, small_peptide_pdb, tmp_path):
+        """Test that DESIGN mode returns design and energy scores."""
+        from graphrelax.pipeline import Pipeline
+
+        config = PipelineConfig(
+            mode=PipelineMode.DESIGN,
+            n_iterations=1,
+            n_outputs=1,
+            design=DesignConfig(model_type="ligand_mpnn", seed=42),
+            relax=RelaxConfig(max_iterations=50, stiffness=10.0),
+        )
+        pipeline = Pipeline(config)
+
+        result = pipeline.run(
+            input_pdb=small_peptide_pdb,
+            output_pdb=tmp_path / "designed.pdb",
+        )
+
+        scores = result["scores"][0]
+        assert "total_score" in scores
+        assert "openmm_energy" in scores
+
+    def test_design_with_resfile(self, small_peptide_pdb, tmp_path):
+        """Test DESIGN mode with resfile constraints."""
+        from graphrelax.pipeline import Pipeline
+
+        # Create a resfile that fixes position 3
+        resfile_path = tmp_path / "design.resfile"
+        resfile_path.write_text(
+            """NATAA
+START
+1 A ALLAA
+2 A ALLAA
+3 A NATRO
+4 A ALLAA
+5 A ALLAA
+"""
+        )
+
+        config = PipelineConfig(
+            mode=PipelineMode.DESIGN,
+            n_iterations=1,
+            n_outputs=1,
+            design=DesignConfig(model_type="ligand_mpnn", seed=42),
+            relax=RelaxConfig(max_iterations=50, stiffness=10.0),
+        )
+        pipeline = Pipeline(config)
+
+        result = pipeline.run(
+            input_pdb=small_peptide_pdb,
+            output_pdb=tmp_path / "designed.pdb",
+            resfile=resfile_path,
+        )
+
+        output = result["outputs"][0]
+        # Position 3 should remain A (fixed by NATRO)
+        assert output["sequence"][2] == "A"
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    not weights_available(),
+    reason="LigandMPNN weights not downloaded",
+)
+class TestPipelineRepackMode:
+    """
+    Tests for RELAX mode (repack + relaxation cycles).
+
+    These tests require LigandMPNN weights to be available.
+    """
+
+    def test_relax_mode_completes(self, small_peptide_pdb, tmp_path):
+        """Test that RELAX mode (repack+minimize) completes."""
+        from graphrelax.pipeline import Pipeline
+
+        config = PipelineConfig(
+            mode=PipelineMode.RELAX,
+            n_iterations=2,
+            n_outputs=1,
+            design=DesignConfig(model_type="ligand_mpnn", seed=42),
+            relax=RelaxConfig(max_iterations=50, stiffness=10.0),
+        )
+        pipeline = Pipeline(config)
+
+        output_pdb = tmp_path / "relaxed.pdb"
+        result = pipeline.run(
+            input_pdb=small_peptide_pdb,
+            output_pdb=output_pdb,
+        )
+
+        assert result is not None
+        assert output_pdb.exists()
+
+    def test_relax_mode_preserves_sequence(self, small_peptide_pdb, tmp_path):
+        """Test that RELAX mode preserves the native sequence."""
+        from graphrelax.pipeline import Pipeline
+
+        config = PipelineConfig(
+            mode=PipelineMode.RELAX,
+            n_iterations=1,
+            n_outputs=1,
+            design=DesignConfig(model_type="ligand_mpnn", seed=42),
+            relax=RelaxConfig(max_iterations=50, stiffness=10.0),
+        )
+        pipeline = Pipeline(config)
+
+        result = pipeline.run(
+            input_pdb=small_peptide_pdb,
+            output_pdb=tmp_path / "relaxed.pdb",
+        )
+
+        output = result["outputs"][0]
+        # Repack should not change sequence
+        assert output["sequence"] == output["native_sequence"]
+
+    def test_relax_mode_multiple_iterations(self, small_peptide_pdb, tmp_path):
+        """Test RELAX mode with multiple iterations."""
+        from graphrelax.pipeline import Pipeline
+
+        config = PipelineConfig(
+            mode=PipelineMode.RELAX,
+            n_iterations=3,
+            n_outputs=1,
+            design=DesignConfig(model_type="ligand_mpnn", seed=42),
+            relax=RelaxConfig(max_iterations=50, stiffness=10.0),
+        )
+        pipeline = Pipeline(config)
+
+        result = pipeline.run(
+            input_pdb=small_peptide_pdb,
+            output_pdb=tmp_path / "relaxed.pdb",
+        )
+
+        output = result["outputs"][0]
+        assert len(output["iterations"]) == 3
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    not weights_available(),
+    reason="LigandMPNN weights not downloaded",
+)
+class TestPipelineDesignOnlyMode:
+    """Tests for DESIGN_ONLY mode (design without relaxation)."""
+
+    def test_design_only_mode_completes(self, small_peptide_pdb, tmp_path):
+        """Test that DESIGN_ONLY mode completes without relaxation."""
+        from graphrelax.pipeline import Pipeline
+
+        config = PipelineConfig(
+            mode=PipelineMode.DESIGN_ONLY,
+            n_iterations=1,
+            n_outputs=1,
+            design=DesignConfig(model_type="ligand_mpnn", seed=42),
+        )
+        pipeline = Pipeline(config)
+
+        output_pdb = tmp_path / "designed.pdb"
+        result = pipeline.run(
+            input_pdb=small_peptide_pdb,
+            output_pdb=output_pdb,
+        )
+
+        assert result is not None
+        assert output_pdb.exists()
+
+    def test_design_only_no_energy(self, small_peptide_pdb, tmp_path):
+        """Test that DESIGN_ONLY mode doesn't compute relaxation energy."""
+        from graphrelax.pipeline import Pipeline
+
+        config = PipelineConfig(
+            mode=PipelineMode.DESIGN_ONLY,
+            n_iterations=1,
+            n_outputs=1,
+            design=DesignConfig(model_type="ligand_mpnn", seed=42),
+        )
+        pipeline = Pipeline(config)
+
+        result = pipeline.run(
+            input_pdb=small_peptide_pdb,
+            output_pdb=tmp_path / "designed.pdb",
+        )
+
+        output = result["outputs"][0]
+        iterations = output["iterations"]
+        # DESIGN_ONLY should not have relax_info
+        assert (
+            "relax_info" not in iterations[0]
+            or iterations[0].get("relax_info") is None
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    not weights_available(),
+    reason="LigandMPNN weights not downloaded",
+)
+class TestPipelineFullWorkflow:
+    """End-to-end tests for the full design+relax workflow."""
+
+    def test_full_workflow_ubiquitin(self, ubiquitin_pdb, tmp_path):
+        """Test full design+relax workflow on ubiquitin."""
+        from graphrelax.pipeline import Pipeline
+
+        config = PipelineConfig(
+            mode=PipelineMode.DESIGN,
+            n_iterations=1,
+            n_outputs=1,
+            design=DesignConfig(
+                model_type="ligand_mpnn",
+                temperature=0.1,
+                seed=42,
+            ),
+            relax=RelaxConfig(max_iterations=100, stiffness=10.0),
+        )
+        pipeline = Pipeline(config)
+
+        output_pdb = tmp_path / "1ubq_designed.pdb"
+        result = pipeline.run(
+            input_pdb=ubiquitin_pdb,
+            output_pdb=output_pdb,
+        )
+
+        assert output_pdb.exists()
+        output = result["outputs"][0]
+
+        # Should have designed sequence
+        assert "sequence" in output
+        assert len(output["sequence"]) == 76
+
+        # Should have energy information
+        assert "final_energy" in output
+
+    def test_multiple_designs(self, small_peptide_pdb, tmp_path):
+        """Test generating multiple designs."""
+        from graphrelax.pipeline import Pipeline
+
+        config = PipelineConfig(
+            mode=PipelineMode.DESIGN,
+            n_iterations=1,
+            n_outputs=3,
+            design=DesignConfig(
+                model_type="ligand_mpnn",
+                temperature=0.5,  # Higher temp for diversity
+                seed=42,
+            ),
+            relax=RelaxConfig(max_iterations=50, stiffness=10.0),
+        )
+        pipeline = Pipeline(config)
+
+        result = pipeline.run(
+            input_pdb=small_peptide_pdb,
+            output_pdb=tmp_path / "designed.pdb",
+        )
+
+        assert len(result["outputs"]) == 3
+
+        # All output files should exist
+        assert (tmp_path / "designed_1.pdb").exists()
+        assert (tmp_path / "designed_2.pdb").exists()
+        assert (tmp_path / "designed_3.pdb").exists()
+
+    def test_scorefile_with_design(self, small_peptide_pdb, tmp_path):
+        """Test scorefile generation with design mode."""
+        from graphrelax.pipeline import Pipeline
+
+        scorefile = tmp_path / "scores.sc"
+        config = PipelineConfig(
+            mode=PipelineMode.DESIGN,
+            n_iterations=1,
+            n_outputs=2,
+            scorefile=scorefile,
+            design=DesignConfig(model_type="ligand_mpnn", seed=42),
+            relax=RelaxConfig(max_iterations=50, stiffness=10.0),
+        )
+        pipeline = Pipeline(config)
+
+        pipeline.run(
+            input_pdb=small_peptide_pdb,
+            output_pdb=tmp_path / "designed.pdb",
+        )
+
+        assert scorefile.exists()
+        content = scorefile.read_text()
+        # Should have header and 2 data lines
+        lines = [ln for ln in content.strip().split("\n") if ln]
+        assert len(lines) >= 3  # header + 2 entries
