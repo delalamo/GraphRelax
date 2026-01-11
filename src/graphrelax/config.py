@@ -53,6 +53,6 @@ class PipelineConfig:
     n_outputs: int = 1  # Number of output models to generate
     scorefile: Optional[Path] = None  # If set, write scores to this file
     verbose: bool = False
-    remove_waters: bool = False  # Remove water molecules from input
+    remove_waters: bool = True  # Remove water molecules from input
     design: DesignConfig = field(default_factory=DesignConfig)
     relax: RelaxConfig = field(default_factory=RelaxConfig)
