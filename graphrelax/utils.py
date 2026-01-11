@@ -1,6 +1,7 @@
 """Utility functions for scoring and I/O."""
 
 import logging
+import math
 from pathlib import Path
 from typing import Optional
 
@@ -90,8 +91,6 @@ def compute_ligandmpnn_score(loss: float) -> float:
     Returns:
         Confidence score (exp(-loss))
     """
-    import math
-
     return math.exp(-loss)
 
 
