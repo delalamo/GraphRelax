@@ -450,11 +450,15 @@ class TestPipelineWithLigand:
         """Test relaxation of protein with heme ligand."""
         from graphrelax.pipeline import Pipeline
 
+        # Use constrained mode for ligand handling - unconstrained mode
+        # doesn't have force field parameters for non-standard residues
         config = PipelineConfig(
             mode=PipelineMode.NO_REPACK,
             n_iterations=1,
             n_outputs=1,
-            relax=RelaxConfig(max_iterations=100, stiffness=10.0),
+            relax=RelaxConfig(
+                max_iterations=100, stiffness=10.0, constrained=True
+            ),
         )
         pipeline = Pipeline(config)
 
@@ -473,11 +477,14 @@ class TestPipelineWithLigand:
         """Test that energy values are reasonable for heme-bound protein."""
         from graphrelax.pipeline import Pipeline
 
+        # Use constrained mode for ligand handling
         config = PipelineConfig(
             mode=PipelineMode.NO_REPACK,
             n_iterations=1,
             n_outputs=1,
-            relax=RelaxConfig(max_iterations=100, stiffness=10.0),
+            relax=RelaxConfig(
+                max_iterations=100, stiffness=10.0, constrained=True
+            ),
         )
         pipeline = Pipeline(config)
 
@@ -498,11 +505,14 @@ class TestPipelineWithLigand:
         """Test that RMSD after relaxation is reasonable for heme protein."""
         from graphrelax.pipeline import Pipeline
 
+        # Use constrained mode for ligand handling
         config = PipelineConfig(
             mode=PipelineMode.NO_REPACK,
             n_iterations=1,
             n_outputs=1,
-            relax=RelaxConfig(max_iterations=100, stiffness=10.0),
+            relax=RelaxConfig(
+                max_iterations=100, stiffness=10.0, constrained=True
+            ),
         )
         pipeline = Pipeline(config)
 

@@ -141,9 +141,13 @@ class Relaxer:
             f"(max_iter={self.config.max_iterations}, gpu={use_gpu})"
         )
 
-        # Parse PDB
-        pdb_file = io.StringIO(pdb_string)
-        pdb = openmm_app.PDBFile(pdb_file)
+        # Use pdbfixer to add missing atoms and terminal groups
+        from pdbfixer import PDBFixer
+
+        fixer = PDBFixer(pdbfile=io.StringIO(pdb_string))
+        fixer.findMissingResidues()
+        fixer.findMissingAtoms()
+        fixer.addMissingAtoms()
 
         # Create force field and system
         force_field = openmm_app.ForceField(
@@ -151,7 +155,7 @@ class Relaxer:
         )
 
         # Use Modeller to add hydrogens
-        modeller = openmm_app.Modeller(pdb.topology, pdb.positions)
+        modeller = openmm_app.Modeller(fixer.topology, fixer.positions)
         modeller.addHydrogens(force_field)
 
         # Create system with HBonds constraints (standard for minimization)

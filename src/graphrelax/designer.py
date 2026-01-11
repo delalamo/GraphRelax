@@ -263,6 +263,10 @@ class Designer:
         """
         self._load_models()
 
+        # Ensure packer is loaded (repack always needs it)
+        if self._packer is None:
+            self._load_packer()
+
         # Parse PDB
         protein_dict, backbone, other_atoms, icodes, _ = parse_PDB(
             str(pdb_path),
@@ -285,7 +289,8 @@ class Designer:
             number_of_ligand_atoms=16,
             model_type="ligand_mpnn",
         )
-        feature_dict["S"] = protein_dict["S"].unsqueeze(0)
+        # Convert S to int64 (required by one_hot in pack_side_chains)
+        feature_dict["S"] = protein_dict["S"].unsqueeze(0).long()
 
         # Pack side chains
         with torch.no_grad():
@@ -301,10 +306,35 @@ class Designer:
         seq_ints = protein_dict["S"].cpu().numpy()
         sequence = "".join([restype_int_to_str[aa] for aa in seq_ints])
 
+        # Compute score (loss) for the repacked structure
+        # For repack, we compute the score of the native sequence
+        with torch.no_grad():
+            # Get log probs from the model
+            B = 1
+            L = feature_dict["mask"].shape[1]
+            feature_dict["batch_size"] = B
+            feature_dict["temperature"] = self.config.temperature
+            feature_dict["bias"] = torch.zeros(
+                [1, L, 21], device=self.device, dtype=torch.float32
+            )
+            feature_dict["symmetry_residues"] = [[]]
+            feature_dict["symmetry_weights"] = [[]]
+            feature_dict["randn"] = torch.randn([B, L], device=self.device)
+
+            output_dict = self._model.sample(feature_dict)
+            loss, loss_per_residue = get_score(
+                feature_dict["S"],
+                output_dict["log_probs"],
+                feature_dict["mask"],
+            )
+
         return {
             "sequence": sequence,
             "native_sequence": sequence,
             "S": protein_dict["S"].unsqueeze(0),
+            "loss": loss.cpu().numpy(),
+            "loss_per_residue": loss_per_residue.cpu().numpy(),
+            "log_probs": output_dict["log_probs"],
             "coordinates": sc_dict["X"],
             "coord_mask": sc_dict["X_m"],
             "b_factors": sc_dict["b_factors"],

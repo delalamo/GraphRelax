@@ -133,7 +133,7 @@ class TestDesignerDesign:
             design_all=True,
         )
 
-        loss = float(result["loss"])
+        loss = result["loss"].item()
         assert loss >= 0  # Loss should be non-negative
         assert loss == loss  # Check not NaN
 
@@ -210,7 +210,7 @@ class TestDesignerRepack:
         result = designer.repack(pdb_path=small_peptide_pdb)
 
         assert "loss" in result
-        loss = float(result["loss"])
+        loss = result["loss"].item()
         assert loss >= 0
 
 
