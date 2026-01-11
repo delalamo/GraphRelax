@@ -31,12 +31,25 @@ dependencies = [
     "absl-py",
     "ml-collections",
     "dm-tree",
+    "openmm",
 ]
 
-# Note: openmm and pdbfixer should be installed via conda:
-# conda install -c conda-forge openmm pdbfixer
+# Note: pdbfixer is not on PyPI, install via conda:
+#   conda install -c conda-forge pdbfixer
 
 [project.optional-dependencies]
+cpu = [
+    # CPU-only OpenMM (smaller install, no GPU dependencies)
+    "openmm[cpu]",
+]
+cuda11 = [
+    # For GPU acceleration with CUDA 11
+    "openmm[cuda11]",
+]
+cuda12 = [
+    # For GPU acceleration with CUDA 12
+    "openmm[cuda12]",
+]
 dev = [
     "pytest",
     "pytest-cov",

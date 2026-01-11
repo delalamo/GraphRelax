@@ -19,21 +19,37 @@ GraphRelax combines **LigandMPNN** (for sequence design and side-chain packing) 
 git clone https://github.com/your-username/GraphRelax.git
 cd GraphRelax
 
-# Install in development mode
+# Install pdbfixer (not available on PyPI)
+conda install -c conda-forge pdbfixer
+
+# Install GraphRelax and dependencies
 pip install -e .
 
 # Download LigandMPNN model weights
 ./scripts/download_weights.sh
 ```
 
+### Platform-specific Installation
+
+```bash
+# CPU-only (smaller install, no GPU dependencies)
+pip install -e ".[cpu]"
+
+# With CUDA 11 GPU support
+pip install -e ".[cuda11]"
+
+# With CUDA 12 GPU support
+pip install -e ".[cuda12]"
+```
+
 ### Dependencies
 
 - Python >= 3.9
 - PyTorch
-- OpenMM
+- OpenMM (pip-installable)
 - BioPython
 - ProDy
-- pdbfixer
+- pdbfixer (conda-forge only)
 - dm-tree
 
 ## Usage
