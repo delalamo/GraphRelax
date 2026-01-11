@@ -10,8 +10,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -28,21 +26,33 @@ jobs:
 
   integration-tests:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v3
         with:
           python-version: "3.11"
+          channels: conda-forge
+          channel-priority: strict
+          activate-environment: test
+          auto-activate-base: false
 
-      - name: Install dependencies
+      - name: Install conda dependencies
+        run: |
+          conda install -y openmm pdbfixer
+
+      - name: Install pip dependencies
         run: |
           pip install -e .[test]
-          pip install openmm
 
-      - name: Run integration tests
+      - name: Download LigandMPNN weights
+        run: |
+          ./scripts/download_weights.sh
+
+      - name: Run all integration tests (including slow)
         run: |
           pytest -m "integration" --cov=graphrelax --cov-report=term-missing

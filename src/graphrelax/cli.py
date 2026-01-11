@@ -200,7 +200,7 @@ def main(args=None) -> int:
         logger.error(f"Resfile not found: {opts.resfile}")
         return 1
 
-    # Lazy imports to avoid loading heavy dependencies at CLI startup
+    # Import here to avoid slow startup from heavy dependencies
     from graphrelax.config import (
         DesignConfig,
         PipelineConfig,

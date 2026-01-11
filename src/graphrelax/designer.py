@@ -14,13 +14,12 @@ from graphrelax.resfile import ALL_AAS, DesignSpec, ResidueMode
 
 logger = logging.getLogger(__name__)
 
-# Add LigandMPNN to path
-PACKAGE_ROOT = Path(__file__).parent.parent
-LIGANDMPNN_PATH = PACKAGE_ROOT / "LigandMPNN"
+# Add vendored LigandMPNN to path
+LIGANDMPNN_PATH = Path(__file__).parent / "LigandMPNN"
 if str(LIGANDMPNN_PATH) not in sys.path:
     sys.path.insert(0, str(LIGANDMPNN_PATH))
 
-# LigandMPNN imports (noqa: E402 for import order after sys.path manipulation)
+# LigandMPNN imports (after sys.path manipulation)
 from data_utils import (  # noqa: E402
     featurize,
     get_score,

@@ -115,7 +115,7 @@ class Pipeline:
                 )
 
             # Add sequence recovery
-            if "sequence" in result and "native_sequence" in result:
+            if result.get("sequence") and result.get("native_sequence"):
                 score_dict["seq_recovery"] = compute_sequence_recovery(
                     result["sequence"], result["native_sequence"]
                 )

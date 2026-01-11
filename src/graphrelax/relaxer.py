@@ -7,29 +7,22 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 import numpy as np
+from openmm import Platform
+from openmm import app as openmm_app
+from openmm import openmm, unit
 
 from graphrelax.config import RelaxConfig
 
-logger = logging.getLogger(__name__)
-
-# Add LigandMPNN to path for OpenFold imports
-PACKAGE_ROOT = Path(__file__).parent.parent
-LIGANDMPNN_PATH = PACKAGE_ROOT / "LigandMPNN"
+# Add vendored LigandMPNN to path for OpenFold imports
+# Must happen before importing from openfold
+LIGANDMPNN_PATH = Path(__file__).parent / "LigandMPNN"
 if str(LIGANDMPNN_PATH) not in sys.path:
     sys.path.insert(0, str(LIGANDMPNN_PATH))
 
-# Try pdbfixer-based relaxer, fall back to direct OpenMM if not available
-try:
-    from openfold.np import protein
-    from openfold.np.relax.relax import AmberRelaxation
+from openfold.np import protein  # noqa: E402
+from openfold.np.relax.relax import AmberRelaxation  # noqa: E402
 
-    HAS_PDBFIXER = True
-except ImportError:
-    HAS_PDBFIXER = False
-    try:
-        from openfold.np import protein
-    except ImportError:
-        protein = None
+logger = logging.getLogger(__name__)
 
 
 class Relaxer:
@@ -44,16 +37,11 @@ class Relaxer:
         if self._use_gpu is not None:
             return self._use_gpu
 
-        try:
-            from openmm import Platform
-
-            for i in range(Platform.getNumPlatforms()):
-                if Platform.getPlatform(i).getName() == "CUDA":
-                    self._use_gpu = True
-                    logger.info("OpenMM CUDA platform detected, using GPU")
-                    return True
-        except Exception as e:
-            logger.debug(f"Could not check OpenMM platforms: {e}")
+        for i in range(Platform.getNumPlatforms()):
+            if Platform.getPlatform(i).getName() == "CUDA":
+                self._use_gpu = True
+                logger.info("OpenMM CUDA platform detected, using GPU")
+                return True
 
         self._use_gpu = False
         logger.info("OpenMM CUDA not available, using CPU")
@@ -69,13 +57,8 @@ class Relaxer:
         Returns:
             Tuple of (relaxed_pdb_string, debug_info, violations)
         """
-        if HAS_PDBFIXER:
-            # Use full OpenFold relaxation with pdbfixer
-            prot = protein.from_pdb_string(pdb_string)
-            return self.relax_protein(prot)
-        else:
-            # Use direct OpenMM minimization without pdbfixer
-            return self._relax_direct(pdb_string)
+        prot = protein.from_pdb_string(pdb_string)
+        return self.relax_protein(prot)
 
     def relax_pdb_file(self, pdb_path: Path) -> Tuple[str, dict, np.ndarray]:
         """
@@ -101,12 +84,6 @@ class Relaxer:
         Returns:
             Tuple of (relaxed_pdb_string, debug_info, violations)
         """
-        if not HAS_PDBFIXER:
-            raise RuntimeError(
-                "pdbfixer is required for relax_protein(). "
-                "Install with: conda install -c conda-forge pdbfixer"
-            )
-
         use_gpu = self._check_gpu_available()
 
         relaxer = AmberRelaxation(
@@ -146,9 +123,6 @@ class Relaxer:
         Returns:
             Tuple of (relaxed_pdb_string, debug_info, violations)
         """
-        from openmm import app as openmm_app
-        from openmm import openmm, unit
-
         ENERGY = unit.kilocalories_per_mole
         LENGTH = unit.angstroms
 
@@ -200,7 +174,10 @@ class Relaxer:
         posinit = state.getPositions(asNumpy=True).value_in_unit(LENGTH)
 
         # Minimize
-        tolerance = self.config.tolerance * ENERGY
+        # OpenMM minimizeEnergy tolerance is in kJ/mol/nm (gradient threshold)
+        tolerance = (
+            self.config.tolerance * unit.kilojoules_per_mole / unit.nanometer
+        )
         simulation.minimizeEnergy(
             maxIterations=self.config.max_iterations, tolerance=tolerance
         )
@@ -239,18 +216,22 @@ class Relaxer:
 
     def _add_restraints(self, system, modeller, stiffness):
         """Add harmonic position restraints to heavy atoms."""
-        from openmm import openmm
-
         force = openmm.CustomExternalForce(
             "0.5 * k * ((x-x0)^2 + (y-y0)^2 + (z-z0)^2)"
         )
-        force.addGlobalParameter("k", stiffness)
+        # Convert stiffness to OpenMM internal units (kJ/mol/nm^2)
+        stiffness_value = stiffness.value_in_unit(
+            unit.kilojoules_per_mole / unit.nanometers**2
+        )
+        force.addGlobalParameter("k", stiffness_value)
         for p in ["x0", "y0", "z0"]:
             force.addPerParticleParameter(p)
 
         for i, atom in enumerate(modeller.topology.atoms()):
             if atom.element.name != "hydrogen":
-                force.addParticle(i, modeller.positions[i])
+                # Convert positions to nanometers (OpenMM internal units)
+                pos = modeller.positions[i].value_in_unit(unit.nanometers)
+                force.addParticle(i, pos)
 
         logger.debug(
             f"Added restraints to {force.getNumParticles()} / "
@@ -269,9 +250,6 @@ class Relaxer:
             Dictionary with energy breakdown by force type
         """
         try:
-            from openmm import app as openmm_app
-            from openmm import openmm, unit
-
             ENERGY = unit.kilocalories_per_mole
 
             # Parse PDB

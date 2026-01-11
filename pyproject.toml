@@ -50,11 +50,13 @@ test = [
 graphrelax = "graphrelax.cli:main"
 
 [tool.setuptools.packages.find]
-where = ["."]
+where = ["src"]
 include = ["graphrelax*"]
 
 [tool.setuptools.package-data]
 graphrelax = ["py.typed"]
+"graphrelax.LigandMPNN" = ["*.py"]
+"graphrelax.LigandMPNN.openfold" = ["**/*.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
