@@ -141,10 +141,24 @@ class Relaxer:
             f"(max_iter={self.config.max_iterations}, gpu={use_gpu})"
         )
 
+        # Separate protein (ATOM) from ligands (HETATM) for proper processing
+        # Ligands in the same chain confuse pdbfixer's terminal detection
+        atom_lines = []
+        hetatm_lines = []
+        for line in pdb_string.split("\n"):
+            if line.startswith("HETATM"):
+                hetatm_lines.append(line)
+            elif line.startswith("END"):
+                pass  # Skip END, we'll add it back
+            else:
+                atom_lines.append(line)
+
+        protein_pdb = "\n".join(atom_lines) + "\nEND\n"
+
         # Use pdbfixer to add missing atoms and terminal groups
         from pdbfixer import PDBFixer
 
-        fixer = PDBFixer(pdbfile=io.StringIO(pdb_string))
+        fixer = PDBFixer(pdbfile=io.StringIO(protein_pdb))
         fixer.findMissingResidues()
         fixer.findMissingAtoms()
         fixer.addMissingAtoms()

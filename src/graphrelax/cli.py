@@ -232,6 +232,31 @@ def main(args=None) -> int:
     else:
         mode = PipelineMode.RELAX  # default
 
+    # Check if input PDB has ligands (HETATM records)
+    has_ligands = False
+    with open(opts.input) as f:
+        for line in f:
+            if line.startswith("HETATM"):
+                # Skip water molecules (HOH, WAT)
+                resname = line[17:20].strip()
+                if resname not in ("HOH", "WAT"):
+                    has_ligands = True
+                    break
+
+    # Validate: ligand_mpnn with ligands requires constrained minimization
+    uses_relaxation = mode in (
+        PipelineMode.RELAX,
+        PipelineMode.NO_REPACK,
+        PipelineMode.DESIGN,
+    )
+    if has_ligands and uses_relaxation and not opts.constrained_minimization:
+        logger.error(
+            "Input PDB contains ligands (HETATM records). "
+            "Unconstrained minimization cannot handle non-standard residues. "
+            "Please use --constrained-minimization flag."
+        )
+        return 1
+
     logger.info(f"Running GraphRelax in {mode.value} mode")
     logger.info(f"Input: {opts.input}")
     logger.info(f"Output: {opts.output}")
