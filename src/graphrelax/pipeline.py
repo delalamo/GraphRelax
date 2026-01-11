@@ -14,6 +14,7 @@ from graphrelax.utils import (
     compute_sequence_recovery,
     format_output_path,
     format_sequence_alignment,
+    remove_waters,
     save_pdb_string,
     write_scorefile,
 )
@@ -149,6 +150,15 @@ class Pipeline:
         # Read input PDB
         with open(input_pdb) as f:
             current_pdb = f.read()
+
+        # Remove waters if requested
+        if self.config.remove_waters:
+            original_lines = len(current_pdb.splitlines())
+            current_pdb = remove_waters(current_pdb)
+            new_lines = len(current_pdb.splitlines())
+            removed = original_lines - new_lines
+            if removed > 0:
+                logger.info(f"Removed {removed} water-related lines from input")
 
         # Store input as temp file for processing
         with tempfile.NamedTemporaryFile(

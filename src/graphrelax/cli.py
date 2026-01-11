@@ -176,6 +176,14 @@ Examples:
         help="Output scorefile with OpenMM energy terms and LigandMPNN scores",
     )
 
+    # Input preprocessing options
+    preprocess_group = parser.add_argument_group("Input preprocessing options")
+    preprocess_group.add_argument(
+        "--remove-waters",
+        action="store_true",
+        help="Remove water molecules (HOH, WAT, SOL) from input structure",
+    )
+
     # General options
     general_group = parser.add_argument_group("General options")
     general_group.add_argument(
@@ -256,6 +264,7 @@ def main(args=None) -> int:
         n_outputs=opts.n_outputs,
         scorefile=opts.scorefile,
         verbose=opts.verbose,
+        remove_waters=opts.remove_waters,
         design=design_config,
         relax=relax_config,
     )
