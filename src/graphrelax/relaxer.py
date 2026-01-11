@@ -174,7 +174,10 @@ class Relaxer:
         posinit = state.getPositions(asNumpy=True).value_in_unit(LENGTH)
 
         # Minimize
-        tolerance = self.config.tolerance * ENERGY
+        # OpenMM minimizeEnergy tolerance is in kJ/mol/nm (gradient threshold)
+        tolerance = (
+            self.config.tolerance * unit.kilojoules_per_mole / unit.nanometer
+        )
         simulation.minimizeEnergy(
             maxIterations=self.config.max_iterations, tolerance=tolerance
         )

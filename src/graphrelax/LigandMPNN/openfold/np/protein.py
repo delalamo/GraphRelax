@@ -84,7 +84,7 @@ def from_pdb_string(pdb_str: str, chain_id: Optional[str] = None) -> Protein:
     Returns:
       A new `Protein` parsed from the pdb contents.
     """
-    pdb_fh = pdb_str
+    pdb_fh = io.StringIO(pdb_str)
     parser = PDB.PDBParser(QUIET=True)
     structure = parser.get_structure("none", pdb_fh)
     models = list(structure.get_models())
