@@ -8,6 +8,39 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
+def remove_waters(pdb_string: str) -> str:
+    """
+    Remove water molecules (HOH, WAT, SOL) from a PDB string.
+
+    Args:
+        pdb_string: PDB file contents as a string
+
+    Returns:
+        PDB string with water molecules removed
+    """
+    water_residues = {"HOH", "WAT", "SOL", "TIP3", "TIP4", "SPC"}
+    filtered_lines = []
+
+    for line in pdb_string.splitlines():
+        # Check ATOM/HETATM records
+        if line.startswith(("ATOM", "HETATM")):
+            # Residue name is in columns 17-20 (0-indexed: 17:20)
+            if len(line) >= 20:
+                resname = line[17:20].strip()
+                if resname in water_residues:
+                    continue
+        # Check TER records that might reference water
+        elif line.startswith("TER"):
+            if len(line) >= 20:
+                resname = line[17:20].strip()
+                if resname in water_residues:
+                    continue
+
+        filtered_lines.append(line)
+
+    return "\n".join(filtered_lines)
+
+
 def compute_sequence_recovery(seq1: str, seq2: str) -> float:
     """
     Compute fraction of identical residues between two sequences.
