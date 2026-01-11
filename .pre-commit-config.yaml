@@ -31,7 +31,7 @@ repos:
           - "--enable=C0415"
           - "--score=n"
         name: pylint (no lazy imports)
-        exclude: "^(graphrelax/__init__.py|graphrelax/cli.py|graphrelax/designer.py|graphrelax/relaxer.py|graphrelax/utils.py|tests/)"
+        exclude: "^(graphrelax/__init__.py|graphrelax/cli.py|graphrelax/designer.py|graphrelax/relaxer.py|graphrelax/utils.py|graphrelax/LigandMPNN/|tests/)"
 
   - repo: https://github.com/pre-commit/mirrors-prettier
     rev: v4.0.0-alpha.8
@@ -39,4 +39,4 @@ repos:
       - id: prettier
         args: ["--write"]
         files: "\\.(md|mdx|css|scss|less|js|jsx|ts|tsx|json|yaml|yml)$"
-        exclude: "^(dist/|build/|external/|LigandMPNN/)"
+        exclude: "^(dist/|build/|external/)"

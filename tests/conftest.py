@@ -75,3 +75,22 @@ def small_peptide_pdb(tmp_path, small_peptide_pdb_string):
     path = tmp_path / "small_peptide.pdb"
     path.write_text(small_peptide_pdb_string)
     return path
+
+
+@pytest.fixture(scope="session")
+def ubiquitin_pdb(tmp_path_factory):
+    """
+    Download 1UBQ (ubiquitin, 76 residues) for integration testing.
+
+    This is a realistic test case with a real protein structure.
+    The file is cached for the session to avoid repeated downloads.
+    """
+    import urllib.request
+
+    cache_dir = tmp_path_factory.mktemp("pdb_cache")
+    pdb_path = cache_dir / "1ubq.pdb"
+
+    url = "https://files.rcsb.org/download/1UBQ.pdb"
+    urllib.request.urlretrieve(url, pdb_path)
+
+    return pdb_path

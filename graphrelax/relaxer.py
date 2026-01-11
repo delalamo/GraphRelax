@@ -12,9 +12,8 @@ from graphrelax.config import RelaxConfig
 
 logger = logging.getLogger(__name__)
 
-# Add LigandMPNN to path for OpenFold imports
-PACKAGE_ROOT = Path(__file__).parent.parent
-LIGANDMPNN_PATH = PACKAGE_ROOT / "LigandMPNN"
+# Add vendored LigandMPNN to path for OpenFold imports
+LIGANDMPNN_PATH = Path(__file__).parent / "LigandMPNN"
 if str(LIGANDMPNN_PATH) not in sys.path:
     sys.path.insert(0, str(LIGANDMPNN_PATH))
 

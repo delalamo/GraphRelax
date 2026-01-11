@@ -16,14 +16,14 @@ GraphRelax combines **LigandMPNN** (for sequence design and side-chain packing) 
 
 ```bash
 # Clone the repository
-git clone --recurse-submodules https://github.com/your-username/GraphRelax.git
+git clone https://github.com/your-username/GraphRelax.git
 cd GraphRelax
-
-# Or if already cloned, initialize submodules
-git submodule update --init --recursive
 
 # Install in development mode
 pip install -e .
+
+# Download LigandMPNN model weights
+./scripts/download_weights.sh
 ```
 
 ### Dependencies
@@ -34,8 +34,7 @@ pip install -e .
 - BioPython
 - ProDy
 - pdbfixer
-- absl-py
-- ml-collections
+- dm-tree
 
 ## Usage
 

@@ -55,6 +55,8 @@ include = ["graphrelax*"]
 
 [tool.setuptools.package-data]
 graphrelax = ["py.typed"]
+"graphrelax.LigandMPNN" = ["*.py"]
+"graphrelax.LigandMPNN.openfold" = ["**/*.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

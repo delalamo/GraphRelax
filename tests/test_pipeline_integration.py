@@ -331,3 +331,83 @@ class TestPipelineResult:
         score = result["scores"][0]
         assert "total_score" in score
         assert "description" in score
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+class TestPipelineWithUbiquitin:
+    """Integration tests using 1UBQ (ubiquitin) as a realistic test case.
+
+    Ubiquitin (PDB: 1UBQ) is a 76-residue protein commonly used as a
+    benchmark for protein structure prediction and design methods.
+    These tests verify the pipeline works with a real protein structure.
+    """
+
+    def test_relax_ubiquitin(self, ubiquitin_pdb, tmp_path):
+        """Test relaxation of ubiquitin structure."""
+        from graphrelax.pipeline import Pipeline
+
+        config = PipelineConfig(
+            mode=PipelineMode.NO_REPACK,
+            n_iterations=1,
+            n_outputs=1,
+            relax=RelaxConfig(max_iterations=100, stiffness=10.0),
+        )
+        pipeline = Pipeline(config)
+
+        output_pdb = tmp_path / "1ubq_relaxed.pdb"
+        result = pipeline.run(
+            input_pdb=ubiquitin_pdb,
+            output_pdb=output_pdb,
+        )
+
+        assert output_pdb.exists()
+        assert "final_energy" in result["outputs"][0]
+        # Ubiquitin should have reasonable energy
+        energy = result["outputs"][0]["final_energy"]
+        assert isinstance(energy, (int, float))
+
+    def test_relax_ubiquitin_energy_decreases(self, ubiquitin_pdb, tmp_path):
+        """Test that relaxation decreases energy for ubiquitin."""
+        from graphrelax.pipeline import Pipeline
+
+        config = PipelineConfig(
+            mode=PipelineMode.NO_REPACK,
+            n_iterations=1,
+            n_outputs=1,
+            relax=RelaxConfig(max_iterations=100, stiffness=5.0),
+        )
+        pipeline = Pipeline(config)
+
+        result = pipeline.run(
+            input_pdb=ubiquitin_pdb,
+            output_pdb=tmp_path / "output.pdb",
+        )
+
+        relax_info = result["outputs"][0]["iterations"][0]["relax_info"]
+        initial_energy = relax_info["initial_energy"]
+        final_energy = relax_info["final_energy"]
+
+        # Energy should decrease or stay similar after relaxation
+        assert final_energy <= initial_energy + 10.0  # Allow small increase
+
+    def test_relax_ubiquitin_rmsd_reasonable(self, ubiquitin_pdb, tmp_path):
+        """Test that RMSD after relaxation is reasonable."""
+        from graphrelax.pipeline import Pipeline
+
+        config = PipelineConfig(
+            mode=PipelineMode.NO_REPACK,
+            n_iterations=1,
+            n_outputs=1,
+            relax=RelaxConfig(max_iterations=100, stiffness=10.0),
+        )
+        pipeline = Pipeline(config)
+
+        result = pipeline.run(
+            input_pdb=ubiquitin_pdb,
+            output_pdb=tmp_path / "output.pdb",
+        )
+
+        rmsd = result["outputs"][0]["iterations"][0]["relax_info"]["rmsd"]
+        # RMSD should be small with restraints
+        assert rmsd < 2.0  # Less than 2 Angstrom

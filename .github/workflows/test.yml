@@ -10,8 +10,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -30,8 +28,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -41,8 +37,12 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -e .[test]
-          pip install openmm
+          pip install openmm pdbfixer
 
-      - name: Run integration tests
+      - name: Download LigandMPNN weights
+        run: |
+          ./scripts/download_weights.sh
+
+      - name: Run all integration tests (including slow)
         run: |
           pytest -m "integration" --cov=graphrelax --cov-report=term-missing
