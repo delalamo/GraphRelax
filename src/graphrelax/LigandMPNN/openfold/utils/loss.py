@@ -1228,13 +1228,32 @@ def find_structural_violations_np(
     atom14_pred_positions: np.ndarray,
     config: ml_collections.ConfigDict,
 ) -> Dict[str, np.ndarray]:
-    to_tensor = lambda x: torch.tensor(x)
+    # Map NumPy dtypes to PyTorch dtypes for NumPy 2.x compatibility
+    dtype_map = {
+        np.float32: torch.float32,
+        np.float64: torch.float64,
+        np.int32: torch.int32,
+        np.int64: torch.int64,
+        np.bool_: torch.bool,
+    }
+
+    def to_tensor(x):
+        if isinstance(x, np.ndarray):
+            torch_dtype = dtype_map.get(x.dtype.type, torch.float32)
+            return torch.tensor(x.tolist(), dtype=torch_dtype)
+        return torch.tensor(x)
+
     batch = tree_map(to_tensor, batch, np.ndarray)
     atom14_pred_positions = to_tensor(atom14_pred_positions)
 
     out = find_structural_violations(batch, atom14_pred_positions, **config)
 
-    to_np = lambda x: np.array(x)
+    # Convert back via detach and tolist for NumPy 2.x compatibility
+    def to_np(x):
+        if hasattr(x, "detach"):
+            return np.array(x.detach().cpu().tolist())
+        return np.array(x)
+
     np_out = tensor_tree_map(to_np, out)
 
     return np_out
@@ -1325,14 +1344,33 @@ def compute_violation_metrics_np(
     atom14_pred_positions: np.ndarray,
     violations: Dict[str, np.ndarray],
 ) -> Dict[str, np.ndarray]:
-    to_tensor = lambda x: torch.tensor(x)
+    # Map NumPy dtypes to PyTorch dtypes for NumPy 2.x compatibility
+    dtype_map = {
+        np.float32: torch.float32,
+        np.float64: torch.float64,
+        np.int32: torch.int32,
+        np.int64: torch.int64,
+        np.bool_: torch.bool,
+    }
+
+    def to_tensor(x):
+        if isinstance(x, np.ndarray):
+            torch_dtype = dtype_map.get(x.dtype.type, torch.float32)
+            return torch.tensor(x.tolist(), dtype=torch_dtype)
+        return torch.tensor(x)
+
     batch = tree_map(to_tensor, batch, np.ndarray)
     atom14_pred_positions = to_tensor(atom14_pred_positions)
     violations = tree_map(to_tensor, violations, np.ndarray)
 
     out = compute_violation_metrics(batch, atom14_pred_positions, violations)
 
-    to_np = lambda x: np.array(x)
+    # Convert back via detach and tolist for NumPy 2.x compatibility
+    def to_np(x):
+        if hasattr(x, "detach"):
+            return np.array(x.detach().cpu().tolist())
+        return np.array(x)
+
     return tree_map(to_np, out, torch.Tensor)
 
 

@@ -84,13 +84,98 @@ def ubiquitin_pdb(tmp_path_factory):
 
     This is a realistic test case with a real protein structure.
     The file is cached for the session to avoid repeated downloads.
+
+    The PDB is cleaned to remove:
+    - HETATM records (water molecules, ligands)
+    - Alternate conformations (keep only 'A' or first conformer)
+    - Non-protein records
+
+    This makes it compatible with the OpenFold relaxation pipeline.
     """
     import urllib.request
 
     cache_dir = tmp_path_factory.mktemp("pdb_cache")
+    raw_pdb_path = cache_dir / "1ubq_raw.pdb"
     pdb_path = cache_dir / "1ubq.pdb"
 
     url = "https://files.rcsb.org/download/1UBQ.pdb"
-    urllib.request.urlretrieve(url, pdb_path)
+    urllib.request.urlretrieve(url, raw_pdb_path)
+
+    # Clean the PDB file for compatibility with OpenFold relaxation
+    clean_lines = []
+    with open(raw_pdb_path) as f:
+        for line in f:
+            # Skip HETATM records (water, ligands)
+            if line.startswith("HETATM"):
+                continue
+            # Keep ATOM records
+            if line.startswith("ATOM"):
+                # Check alternate location indicator (column 17)
+                alt_loc = line[16] if len(line) > 16 else " "
+                # Keep only first conformer (blank or 'A')
+                if alt_loc not in (" ", "A"):
+                    continue
+                # Remove alt loc indicator for consistency
+                if alt_loc == "A":
+                    line = line[:16] + " " + line[17:]
+                clean_lines.append(line)
+            # Keep essential records
+            elif line.startswith(("TER", "END", "MODEL", "ENDMDL")):
+                clean_lines.append(line)
+
+    with open(pdb_path, "w") as f:
+        f.writelines(clean_lines)
+
+    return pdb_path
+
+
+@pytest.fixture(scope="session")
+def heme_protein_pdb(tmp_path_factory):
+    """
+    Download 8VC8 (heme-loaded designed protein) for integration testing.
+
+    This structure contains:
+    - A designed protein (single chain A)
+    - A heme group (HEM)
+    - Sulfate ions (SO4)
+    - Crystal waters (HOH)
+
+    This tests that the pipeline handles non-protein molecules correctly.
+    The PDB is cleaned to remove waters and ions but preserves the heme.
+    """
+    import urllib.request
+
+    cache_dir = tmp_path_factory.mktemp("pdb_cache")
+    raw_pdb_path = cache_dir / "8vc8_raw.pdb"
+    pdb_path = cache_dir / "8vc8.pdb"
+
+    url = "https://files.rcsb.org/download/8VC8.pdb"
+    urllib.request.urlretrieve(url, raw_pdb_path)
+
+    # Clean the PDB file:
+    # - Keep ATOM records (protein)
+    # - Keep HETATM for HEM (heme group) - this is the key ligand
+    # - Remove water (HOH), sulfate (SO4), and other small molecules
+    clean_lines = []
+    with open(raw_pdb_path) as f:
+        for line in f:
+            if line.startswith("ATOM"):
+                # Check alternate location indicator (column 17)
+                alt_loc = line[16] if len(line) > 16 else " "
+                if alt_loc not in (" ", "A"):
+                    continue
+                if alt_loc == "A":
+                    line = line[:16] + " " + line[17:]
+                clean_lines.append(line)
+            elif line.startswith("HETATM"):
+                # Keep heme group, skip water and ions
+                res_name = line[17:20].strip()
+                if res_name == "HEM":
+                    clean_lines.append(line)
+            elif line.startswith(("TER", "END", "MODEL", "ENDMDL")):
+                clean_lines.append(line)
+
+    with open(pdb_path, "w") as f:
+        f.writelines(clean_lines)
 
     return pdb_path

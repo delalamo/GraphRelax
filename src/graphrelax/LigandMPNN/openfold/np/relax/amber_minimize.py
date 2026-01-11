@@ -171,11 +171,37 @@ def _check_residues_are_well_defined(prot: protein.Protein):
         )
 
 
-def _check_atom_mask_is_ideal(prot):
-    """Sanity-check the atom mask is ideal, up to a possible OXT."""
+def _check_atom_mask_is_ideal(prot, strict: bool = False):
+    """Sanity-check the atom mask is ideal, up to a possible OXT.
+
+    Args:
+        prot: A protein.Protein instance.
+        strict: If True, raises an AssertionError on mismatch. If False (default),
+            logs a warning. This allows processing of experimental PDBs that may
+            have missing atoms that PDBFixer will add later.
+    """
     atom_mask = prot.atom_mask
     ideal_atom_mask = protein.ideal_atom_mask(prot)
-    utils.assert_equal_nonterminal_atom_types(atom_mask, ideal_atom_mask)
+
+    # Check for mismatches (ignoring OXT which may be added during minimization)
+    oxt = residue_constants.atom_order["OXT"]
+    no_oxt_mask = np.ones(shape=atom_mask.shape, dtype=bool)
+    no_oxt_mask[..., oxt] = False
+
+    mismatches = np.sum(
+        np.abs(atom_mask[no_oxt_mask] - ideal_atom_mask[no_oxt_mask]) > 0.5
+    )
+
+    if mismatches > 0:
+        msg = (
+            f"Atom mask differs from ideal by {mismatches} atoms. "
+            "This is common for experimental PDBs with missing atoms. "
+            "PDBFixer will attempt to add missing atoms."
+        )
+        if strict:
+            raise AssertionError(msg)
+        else:
+            logging.warning(msg)
 
 
 def clean_protein(prot: protein.Protein, checks: bool = True):

@@ -411,3 +411,82 @@ class TestPipelineWithUbiquitin:
         rmsd = result["outputs"][0]["iterations"][0]["relax_info"]["rmsd"]
         # RMSD should be small with restraints
         assert rmsd < 2.0  # Less than 2 Angstrom
+
+
+@pytest.mark.integration
+class TestPipelineWithLigand:
+    """
+    Integration tests for pipeline with ligand-containing structures.
+
+    These tests use PDB 8VC8, a designed protein with a bound heme group,
+    to verify the pipeline handles non-protein molecules correctly.
+    """
+
+    def test_relax_heme_protein(self, heme_protein_pdb, tmp_path):
+        """Test relaxation of protein with heme ligand."""
+        from graphrelax.pipeline import Pipeline
+
+        config = PipelineConfig(
+            mode=PipelineMode.NO_REPACK,
+            n_iterations=1,
+            n_outputs=1,
+            relax=RelaxConfig(max_iterations=100, stiffness=10.0),
+        )
+        pipeline = Pipeline(config)
+
+        output_pdb = tmp_path / "8vc8_relaxed.pdb"
+        result = pipeline.run(
+            input_pdb=heme_protein_pdb,
+            output_pdb=output_pdb,
+        )
+
+        # Check relaxation completed
+        assert result is not None
+        assert len(result["outputs"]) == 1
+        assert output_pdb.exists()
+
+    def test_heme_protein_energy_reasonable(self, heme_protein_pdb, tmp_path):
+        """Test that energy values are reasonable for heme-bound protein."""
+        from graphrelax.pipeline import Pipeline
+
+        config = PipelineConfig(
+            mode=PipelineMode.NO_REPACK,
+            n_iterations=1,
+            n_outputs=1,
+            relax=RelaxConfig(max_iterations=100, stiffness=10.0),
+        )
+        pipeline = Pipeline(config)
+
+        result = pipeline.run(
+            input_pdb=heme_protein_pdb,
+            output_pdb=tmp_path / "output.pdb",
+        )
+
+        relax_info = result["outputs"][0]["iterations"][0]["relax_info"]
+        final_energy = relax_info["final_energy"]
+
+        # Energy should be a reasonable number (not nan or inf)
+        assert final_energy is not None
+        assert not (final_energy != final_energy)  # Check not NaN
+        assert abs(final_energy) < 1e10  # Not unreasonably large
+
+    def test_heme_protein_rmsd_reasonable(self, heme_protein_pdb, tmp_path):
+        """Test that RMSD after relaxation is reasonable for heme protein."""
+        from graphrelax.pipeline import Pipeline
+
+        config = PipelineConfig(
+            mode=PipelineMode.NO_REPACK,
+            n_iterations=1,
+            n_outputs=1,
+            relax=RelaxConfig(max_iterations=100, stiffness=10.0),
+        )
+        pipeline = Pipeline(config)
+
+        result = pipeline.run(
+            input_pdb=heme_protein_pdb,
+            output_pdb=tmp_path / "output.pdb",
+        )
+
+        rmsd = result["outputs"][0]["iterations"][0]["relax_info"]["rmsd"]
+        # RMSD should be small with restraints
+        assert rmsd < 2.0  # Less than 2 Angstrom
