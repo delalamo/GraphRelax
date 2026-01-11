@@ -50,7 +50,7 @@ test = [
 graphrelax = "graphrelax.cli:main"
 
 [tool.setuptools.packages.find]
-where = ["."]
+where = ["src"]
 include = ["graphrelax*"]
 
 [tool.setuptools.package-data]
