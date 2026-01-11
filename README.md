@@ -98,8 +98,8 @@ graphrelax -i input.pdb -o designed.pdb --design-only -n 100
 # With scorefile output
 graphrelax -i input.pdb -o relaxed.pdb --scorefile scores.sc
 
-# Design with ligand context
-graphrelax -i complex.pdb -o designed.pdb --design --model-type ligand_mpnn
+# Design with ligand context (requires --constrained-minimization for ligands)
+graphrelax -i complex.pdb -o designed.pdb --design --model-type ligand_mpnn --constrained-minimization
 ```
 
 ### Operating Modes
@@ -134,6 +134,24 @@ graphrelax -i input.pdb -o relaxed.pdb --constrained-minimization --stiffness 5.
 | ---------------------------- | ------------------- | ------------------ | ------ | ----------------- |
 | Default (unconstrained)      | No                  | No                 | Fast   | No                |
 | `--constrained-minimization` | Yes (harmonic)      | Yes                | Slower | Yes               |
+
+**Important:** When your input PDB contains ligands or other non-standard residues (HETATM records other than water), you **must** use `--constrained-minimization`. The unconstrained mode uses AMBER force field parameters which don't include templates for non-standard molecules. Constrained mode uses OpenFold's AmberRelaxation which can handle ligands properly.
+
+### Working with Ligands
+
+When designing proteins with bound ligands (e.g., heme, cofactors, small molecules), use `ligand_mpnn` model type with constrained minimization:
+
+```bash
+# Design around a ligand
+graphrelax -i protein_with_ligand.pdb -o designed.pdb \
+    --design --model-type ligand_mpnn --constrained-minimization
+
+# Repack side chains around a ligand
+graphrelax -i protein_with_ligand.pdb -o repacked.pdb \
+    --relax --model-type ligand_mpnn --constrained-minimization
+```
+
+**Note:** If you attempt to use unconstrained minimization with a PDB containing ligands, GraphRelax will exit with an error message directing you to use `--constrained-minimization`.
 
 ### Resfile Format
 
@@ -199,9 +217,13 @@ Relaxation options:
   --constrained-minimization  Use constrained minimization with position
                               restraints (AlphaFold-style). Default is
                               unconstrained. Requires pdbfixer.
+                              **Required when input PDB contains ligands.**
   --stiffness K         Restraint stiffness in kcal/mol/A^2 (default: 10.0)
                         Only applies to constrained minimization.
   --max-iterations N    Max L-BFGS iterations, 0=unlimited (default: 0)
+
+Input preprocessing:
+  --keep-waters         Keep water molecules in input (default: removed)
 
 Scoring:
   --scorefile FILE      Output scorefile with energy terms
