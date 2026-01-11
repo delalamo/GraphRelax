@@ -13,11 +13,6 @@ authors = [
     {name = "GraphRelax Authors"}
 ]
 keywords = ["protein", "design", "relaxation", "LigandMPNN", "OpenMM", "molecular-dynamics", "protein-design", "bioinformatics"]
-
-[project.urls]
-Homepage = "https://github.com/delalamo/GraphRelax"
-Repository = "https://github.com/delalamo/GraphRelax"
-Issues = "https://github.com/delalamo/GraphRelax/issues"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
@@ -41,6 +36,11 @@ dependencies = [
 
 # Note: pdbfixer is not on PyPI, install via conda:
 #   conda install -c conda-forge pdbfixer
+
+[project.urls]
+Homepage = "https://github.com/delalamo/GraphRelax"
+Repository = "https://github.com/delalamo/GraphRelax"
+Issues = "https://github.com/delalamo/GraphRelax/issues"
 
 [project.optional-dependencies]
 cpu = [

@@ -209,3 +209,6 @@ __marimo__/
 
 # LigandMPNN model weights (downloaded via scripts/download_weights.sh)
 src/graphrelax/LigandMPNN/model_params/*.pt
+
+# Auto-generated version file (setuptools-scm)
+src/graphrelax/_version.py

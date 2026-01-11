@@ -6,7 +6,11 @@ sequence design/repacking (LigandMPNN) and physics-based energy minimization
 (OpenMM AMBER), similar to Rosetta FastRelax and Design protocols.
 """
 
-__version__ = "0.1.0"
+try:
+    from graphrelax._version import __version__
+except ImportError:
+    # Package not installed (running from source without build)
+    __version__ = "0.0.0.dev0"
 
 
 def __getattr__(name):
