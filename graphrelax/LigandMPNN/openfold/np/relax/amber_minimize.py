@@ -68,7 +68,11 @@ def _add_restraints(
     force = openmm.CustomExternalForce(
         "0.5 * k * ((x-x0)^2 + (y-y0)^2 + (z-z0)^2)"
     )
-    force.addGlobalParameter("k", stiffness)
+    # Convert stiffness to OpenMM internal units (kJ/mol/nm^2)
+    stiffness_value = stiffness.value_in_unit(
+        unit.kilojoules_per_mole / unit.nanometers**2
+    )
+    force.addGlobalParameter("k", stiffness_value)
     for p in ["x0", "y0", "z0"]:
         force.addPerParticleParameter(p)
 
@@ -76,7 +80,9 @@ def _add_restraints(
         if atom.residue.index in exclude_residues:
             continue
         if will_restrain(atom, rset):
-            force.addParticle(i, reference_pdb.positions[i])
+            # Convert positions to nanometers (OpenMM internal units)
+            pos = reference_pdb.positions[i].value_in_unit(unit.nanometers)
+            force.addParticle(i, pos)
     logging.info(
         "Restraining %d / %d particles.",
         force.getNumParticles(),

@@ -216,13 +216,19 @@ class Relaxer:
         force = openmm.CustomExternalForce(
             "0.5 * k * ((x-x0)^2 + (y-y0)^2 + (z-z0)^2)"
         )
-        force.addGlobalParameter("k", stiffness)
+        # Convert stiffness to OpenMM internal units (kJ/mol/nm^2)
+        stiffness_value = stiffness.value_in_unit(
+            unit.kilojoules_per_mole / unit.nanometers**2
+        )
+        force.addGlobalParameter("k", stiffness_value)
         for p in ["x0", "y0", "z0"]:
             force.addPerParticleParameter(p)
 
         for i, atom in enumerate(modeller.topology.atoms()):
             if atom.element.name != "hydrogen":
-                force.addParticle(i, modeller.positions[i])
+                # Convert positions to nanometers (OpenMM internal units)
+                pos = modeller.positions[i].value_in_unit(unit.nanometers)
+                force.addParticle(i, pos)
 
         logger.debug(
             f"Added restraints to {force.getNumParticles()} / "
