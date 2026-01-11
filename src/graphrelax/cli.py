@@ -142,11 +142,22 @@ Examples:
     # Relaxation options
     relax_group = parser.add_argument_group("Relaxation options")
     relax_group.add_argument(
+        "--constrained-minimization",
+        action="store_true",
+        help=(
+            "Use constrained minimization with position restraints and "
+            "violation checking (AlphaFold-style). Default is unconstrained."
+        ),
+    )
+    relax_group.add_argument(
         "--stiffness",
         type=float,
         default=10.0,
         metavar="K",
-        help="Restraint stiffness in kcal/mol/A^2 (default: 10.0)",
+        help=(
+            "Restraint stiffness in kcal/mol/A^2 for constrained mode "
+            "(default: 10.0)"
+        ),
     )
     relax_group.add_argument(
         "--max-iterations",
@@ -236,6 +247,7 @@ def main(args=None) -> int:
     relax_config = RelaxConfig(
         stiffness=opts.stiffness,
         max_iterations=opts.max_iterations,
+        constrained=opts.constrained_minimization,
     )
 
     pipeline_config = PipelineConfig(

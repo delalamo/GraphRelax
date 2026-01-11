@@ -13,6 +13,7 @@ from graphrelax.utils import (
     compute_ligandmpnn_score,
     compute_sequence_recovery,
     format_output_path,
+    format_sequence_alignment,
     save_pdb_string,
     write_scorefile,
 )
@@ -156,6 +157,9 @@ class Pipeline:
             tmp.write(current_pdb)
             current_pdb_path = Path(tmp.name)
 
+        # Track the original native sequence (from input PDB)
+        original_native_sequence = None
+
         try:
             for iteration in range(1, self.config.n_iterations + 1):
                 logger.info(
@@ -167,6 +171,7 @@ class Pipeline:
                     design_spec=design_spec,
                     design_all=design_all,
                     iteration=iteration,
+                    original_native_sequence=original_native_sequence,
                 )
                 result["iterations"].append(iter_result)
 
@@ -174,7 +179,7 @@ class Pipeline:
                 current_pdb = iter_result["output_pdb"]
                 current_pdb_path.write_text(current_pdb)
 
-                # Track sequence
+                # Track sequence - capture original native on first iteration
                 if "sequence" in iter_result:
                     result["sequence"] = iter_result["sequence"]
                 if (
@@ -182,6 +187,7 @@ class Pipeline:
                     and result["native_sequence"] is None
                 ):
                     result["native_sequence"] = iter_result["native_sequence"]
+                    original_native_sequence = iter_result["native_sequence"]
 
                 # Log progress
                 if "relax_info" in iter_result:
@@ -217,6 +223,7 @@ class Pipeline:
         design_spec: Optional[DesignSpec],
         design_all: bool,
         iteration: int,
+        original_native_sequence: Optional[str] = None,
     ) -> dict:
         """Run a single iteration of design/repack + relax."""
         iter_result = {}
@@ -235,6 +242,16 @@ class Pipeline:
             iter_result["sequence"] = design_result["sequence"]
             iter_result["native_sequence"] = design_result["native_sequence"]
             iter_result["ligandmpnn_loss"] = float(design_result["loss"][0])
+
+            # Log sequence alignment vs original native sequence
+            compare_to = (
+                original_native_sequence or design_result["native_sequence"]
+            )
+            alignment = format_sequence_alignment(
+                compare_to,
+                design_result["sequence"],
+            )
+            logger.info(f"    Sequence design result:\n{alignment}")
 
         elif self.config.mode in (PipelineMode.RELAX, PipelineMode.REPACK_ONLY):
             # Repack mode

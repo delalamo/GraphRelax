@@ -4,14 +4,6 @@ A drop-in replacement for Rosetta Relax that replaces force field-guided residue
 
 GraphRelax combines **LigandMPNN** (for sequence design and side-chain packing) with **OpenMM AMBER minimization** to reproduce Rosetta FastRelax and Design protocols.
 
-## Features
-
-- **FastRelax-like protocol**: Alternate between side-chain repacking and energy minimization
-- **Sequence design**: Full redesign or residue-specific control via Rosetta-style resfiles
-- **Multiple output modes**: Relax-only, repack-only, design-only, or combinations
-- **GPU acceleration**: Automatic GPU detection for both LigandMPNN and OpenMM
-- **Scorefile output**: Rosetta-compatible scorefiles with energy terms and sequence metrics
-
 ## Installation
 
 ```bash
@@ -19,14 +11,20 @@ GraphRelax combines **LigandMPNN** (for sequence design and side-chain packing) 
 git clone https://github.com/your-username/GraphRelax.git
 cd GraphRelax
 
-# Install pdbfixer (not available on PyPI)
-conda install -c conda-forge pdbfixer
-
 # Install GraphRelax and dependencies
 pip install -e .
 
-# Download LigandMPNN model weights
+# Download LigandMPNN model weights (~40MB)
 ./scripts/download_weights.sh
+```
+
+### Optional: Constrained Minimization
+
+If you want to use `--constrained-minimization` mode (AlphaFold-style relaxation with position restraints and violation checking), you also need pdbfixer:
+
+```bash
+# pdbfixer is only available via conda-forge, not PyPI
+conda install -c conda-forge pdbfixer
 ```
 
 ### Platform-specific Installation
@@ -44,13 +42,29 @@ pip install -e ".[cuda12]"
 
 ### Dependencies
 
+Core dependencies (installed automatically via pip):
+
 - Python >= 3.9
-- PyTorch
-- OpenMM (pip-installable)
+- PyTorch >= 2.0
+- NumPy < 2.0 (PyTorch <2.5 is incompatible with NumPy 2.x)
+- OpenMM
 - BioPython
 - ProDy
-- pdbfixer (conda-forge only)
 - dm-tree
+- absl-py
+- ml-collections
+
+Optional (for `--constrained-minimization` only):
+
+- pdbfixer (conda-forge only, not on PyPI)
+
+## Features
+
+- **FastRelax-like protocol**: Alternate between side-chain repacking and energy minimization
+- **Sequence design**: Full redesign or residue-specific control via Rosetta-style resfiles
+- **Multiple output modes**: Relax-only, repack-only, design-only, or combinations
+- **GPU acceleration**: Automatic GPU detection for both LigandMPNN and OpenMM
+- **Scorefile output**: Rosetta-compatible scorefiles with energy terms and sequence metrics
 
 ## Usage
 
@@ -97,6 +111,29 @@ graphrelax -i complex.pdb -o designed.pdb --design --model-type ligand_mpnn
 | `--no-repack`       | No     | No     | Yes      |
 | `--design`          | No     | Yes    | Yes      |
 | `--design-only`     | No     | Yes    | No       |
+
+### Minimization Modes
+
+By default, GraphRelax uses **unconstrained minimization** - a simple, bare-bones OpenMM energy minimization with no position restraints and default tolerance parameters. This is fast and works well for most use cases.
+
+For more controlled minimization (AlphaFold-style), use `--constrained-minimization`:
+
+```bash
+# Default: unconstrained minimization (fast, no restraints)
+graphrelax -i input.pdb -o relaxed.pdb --no-repack
+
+# Constrained minimization with position restraints and violation checking
+# Note: requires pdbfixer (conda install -c conda-forge pdbfixer)
+graphrelax -i input.pdb -o relaxed.pdb --no-repack --constrained-minimization
+
+# Constrained with custom restraint stiffness
+graphrelax -i input.pdb -o relaxed.pdb --constrained-minimization --stiffness 5.0
+```
+
+| Mode                         | Position Restraints | Violation Checking | Speed  | Requires pdbfixer |
+| ---------------------------- | ------------------- | ------------------ | ------ | ----------------- |
+| Default (unconstrained)      | No                  | No                 | Fast   | No                |
+| `--constrained-minimization` | Yes (harmonic)      | Yes                | Slower | Yes               |
 
 ### Resfile Format
 
@@ -159,7 +196,11 @@ Design options:
   --model-type TYPE     protein_mpnn, ligand_mpnn, or soluble_mpnn
 
 Relaxation options:
+  --constrained-minimization  Use constrained minimization with position
+                              restraints (AlphaFold-style). Default is
+                              unconstrained. Requires pdbfixer.
   --stiffness K         Restraint stiffness in kcal/mol/A^2 (default: 10.0)
+                        Only applies to constrained minimization.
   --max-iterations N    Max L-BFGS iterations, 0=unlimited (default: 0)
 
 Scoring:
@@ -198,6 +239,7 @@ config = PipelineConfig(
     ),
     relax=RelaxConfig(
         stiffness=10.0,
+        constrained=False,  # Default: unconstrained minimization
     ),
 )
 
@@ -223,7 +265,7 @@ GraphRelax implements an alternating optimization protocol similar to Rosetta Fa
 1. **Parse Input**: Read PDB structure and optional resfile
 2. **For each iteration**:
    - **Design/Repack Phase**: Use LigandMPNN to generate sequences or repack side chains
-   - **Minimize Phase**: Use OpenMM with AMBER99SB force field for energy minimization
+   - **Minimize Phase**: Use OpenMM with AMBER force field for energy minimization
 3. **Output**: Write final structure(s) and optional scorefile
 
 ### Key Differences from Rosetta
@@ -232,7 +274,7 @@ GraphRelax implements an alternating optimization protocol similar to Rosetta Fa
 | ----------------- | ---------------------------- | ------------------------------ |
 | Sequence sampling | Monte Carlo with force field | LigandMPNN neural network      |
 | Rotamer packing   | Discrete rotamer library     | LigandMPNN continuous sampling |
-| Energy function   | Rosetta energy function      | AMBER99SB force field          |
+| Energy function   | Rosetta energy function      | AMBER force field              |
 | Speed             | Slower                       | Faster (GPU acceleration)      |
 
 ## License

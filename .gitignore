@@ -206,3 +206,6 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# LigandMPNN model weights (downloaded via scripts/download_weights.sh)
+src/graphrelax/LigandMPNN/model_params/*.pt

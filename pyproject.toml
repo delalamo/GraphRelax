@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=61.0", "setuptools-scm>=8.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "graphrelax"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Combine LigandMPNN sequence design with AMBER relaxation"
 readme = "README.md"
 license = {text = "MIT"}
@@ -12,7 +12,12 @@ requires-python = ">=3.9"
 authors = [
     {name = "GraphRelax Authors"}
 ]
-keywords = ["protein", "design", "relaxation", "LigandMPNN", "OpenMM"]
+keywords = ["protein", "design", "relaxation", "LigandMPNN", "OpenMM", "molecular-dynamics", "protein-design", "bioinformatics"]
+
+[project.urls]
+Homepage = "https://github.com/delalamo/GraphRelax"
+Repository = "https://github.com/delalamo/GraphRelax"
+Issues = "https://github.com/delalamo/GraphRelax/issues"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
@@ -24,8 +29,8 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
 ]
 dependencies = [
-    "torch",
-    "numpy",
+    "torch>=2.0",
+    "numpy<2",  # PyTorch <2.5 is incompatible with NumPy 2.x
     "prody",
     "biopython",
     "absl-py",
@@ -78,6 +83,14 @@ markers = [
     "integration: marks tests as integration tests (require OpenMM)",
     "slow: marks tests as slow (skipped by default)",
 ]
+
+[tool.setuptools_scm]
+# Version from git tags (e.g., v0.1.0 -> 0.1.0)
+# Commits after tag get dev versions (e.g., 0.1.0.dev3+g1234567)
+version_scheme = "guess-next-dev"
+local_scheme = "no-local-version"
+# Write version to a file for runtime access
+write_to = "src/graphrelax/_version.py"
 
 [tool.black]
 line-length = 80

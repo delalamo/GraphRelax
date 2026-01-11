@@ -40,6 +40,7 @@ class RelaxConfig:
     tolerance: float = 2.39  # kcal/mol (OpenMM default)
     stiffness: float = 10.0  # kcal/mol/A^2
     max_outer_iterations: int = 3  # Violation-fixing iterations
+    constrained: bool = False  # Use constrained (AmberRelaxation) minimization
     # GPU is auto-detected and used when available
 
 

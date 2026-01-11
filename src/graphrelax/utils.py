@@ -120,3 +120,63 @@ def save_pdb_string(pdb_string: str, path: Path):
     with open(path, "w") as f:
         f.write(pdb_string)
     logger.info(f"Saved structure to {path}")
+
+
+def format_sequence_alignment(native: str, designed: str) -> str:
+    """
+    Format a sequence alignment showing changes between native and designed.
+
+    Args:
+        native: Original sequence
+        designed: Designed sequence
+
+    Returns:
+        Multi-line string showing alignment with:
+        - Native sequence on top
+        - Change indicator (. for same, letter for changed)
+        - Designed sequence on bottom
+    """
+    if len(native) != len(designed):
+        min_len = min(len(native), len(designed))
+        native = native[:min_len]
+        designed = designed[:min_len]
+
+    # Build change line: dot if same, new AA if changed
+    changes = ""
+    for n, d in zip(native, designed):
+        if n == d:
+            changes += "."
+        else:
+            changes += d
+
+    # Count mutations
+    n_mutations = sum(1 for n, d in zip(native, designed) if n != d)
+
+    # Format with position markers every 10 residues
+    lines = []
+    chunk_size = 50
+
+    for i in range(0, len(native), chunk_size):
+        end = min(i + chunk_size, len(native))
+        pos_start = i + 1
+        pos_end = end
+
+        # Position header
+        pos_line = f"{pos_start:>4}"
+        pos_line += " " * (chunk_size - len(str(pos_start)) - len(str(pos_end)))
+        pos_line += f"{pos_end}"
+
+        lines.append(f"         {pos_line}")
+        lines.append(f"  Native {native[i:end]}")
+        lines.append(f"         {changes[i:end]}")
+        lines.append(f"Designed {designed[i:end]}")
+        lines.append("")
+
+    # Summary
+    recovery = compute_sequence_recovery(native, designed)
+    lines.append(
+        f"  Mutations: {n_mutations}/{len(native)} "
+        f"({100*(1-recovery):.1f}% changed, {100*recovery:.1f}% recovered)"
+    )
+
+    return "\n".join(lines)

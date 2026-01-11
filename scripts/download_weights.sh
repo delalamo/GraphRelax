@@ -15,17 +15,21 @@ echo "Downloading LigandMPNN model weights..."
 BASE_URL="https://files.ipd.uw.edu/pub/ligandmpnn"
 
 # Download main model weights
-wget -q --show-progress -O "$WEIGHTS_DIR/proteinmpnn_v_48_020.pt" \
+echo "Downloading proteinmpnn_v_48_020.pt..."
+curl -# -o "$WEIGHTS_DIR/proteinmpnn_v_48_020.pt" \
     "$BASE_URL/proteinmpnn_v_48_020.pt"
 
-wget -q --show-progress -O "$WEIGHTS_DIR/ligandmpnn_v_32_010_25.pt" \
+echo "Downloading ligandmpnn_v_32_010_25.pt..."
+curl -# -o "$WEIGHTS_DIR/ligandmpnn_v_32_010_25.pt" \
     "$BASE_URL/ligandmpnn_v_32_010_25.pt"
 
-wget -q --show-progress -O "$WEIGHTS_DIR/solublempnn_v_48_020.pt" \
+echo "Downloading solublempnn_v_48_020.pt..."
+curl -# -o "$WEIGHTS_DIR/solublempnn_v_48_020.pt" \
     "$BASE_URL/solublempnn_v_48_020.pt"
 
 # Download side chain packer weights
-wget -q --show-progress -O "$WEIGHTS_DIR/ligandmpnn_sc_v_32_002_16.pt" \
+echo "Downloading ligandmpnn_sc_v_32_002_16.pt..."
+curl -# -o "$WEIGHTS_DIR/ligandmpnn_sc_v_32_002_16.pt" \
     "$BASE_URL/ligandmpnn_sc_v_32_002_16.pt"
 
 echo "Done! Model weights downloaded to $WEIGHTS_DIR"
