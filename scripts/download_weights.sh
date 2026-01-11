@@ -4,7 +4,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PACKAGE_DIR="$SCRIPT_DIR/../graphrelax/LigandMPNN"
+PACKAGE_DIR="$SCRIPT_DIR/../src/graphrelax/LigandMPNN"
 WEIGHTS_DIR="$PACKAGE_DIR/model_params"
 
 mkdir -p "$WEIGHTS_DIR"
