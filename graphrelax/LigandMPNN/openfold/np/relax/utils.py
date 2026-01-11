@@ -21,8 +21,14 @@ import io
 import numpy as np
 from Bio import PDB
 from openfold.np import residue_constants
-from simtk.openmm import app as openmm_app
-from simtk.openmm.app.internal.pdbstructure import PdbStructure
+
+try:
+    from simtk.openmm import app as openmm_app
+    from simtk.openmm.app.internal.pdbstructure import PdbStructure
+except ImportError:
+    # OpenMM 8.0+ moved to openmm namespace
+    from openmm import app as openmm_app
+    from openmm.app.internal.pdbstructure import PdbStructure
 
 
 def overwrite_pdb_coordinates(pdb_str: str, pos) -> str:
