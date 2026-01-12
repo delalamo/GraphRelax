@@ -1,0 +1,14 @@
+.git
+__pycache__
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+.venv/
+venv/
+.idea/
+.vscode/
+src/graphrelax/LigandMPNN/model_params/*.pt
+.DS_Store

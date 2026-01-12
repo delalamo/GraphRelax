@@ -6,6 +6,8 @@ import logging
 import sys
 from pathlib import Path
 
+from graphrelax.weights import ensure_weights
+
 
 def setup_logging(verbose: bool):
     """Configure logging."""
@@ -275,6 +277,9 @@ def main(args=None) -> int:
             "Supported formats: .pdb, .cif, .mmcif"
         )
         return 1
+
+    # Ensure model weights are downloaded
+    ensure_weights(verbose=opts.verbose)
 
     # Import here to avoid slow startup from heavy dependencies
     from graphrelax.config import (

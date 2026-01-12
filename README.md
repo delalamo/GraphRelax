@@ -7,15 +7,21 @@ GraphRelax combines **LigandMPNN** (for sequence design and side-chain packing) 
 ## Installation
 
 ```bash
+# Install from PyPI
+pip install graphrelax
+```
+
+LigandMPNN model weights (~40MB) are downloaded automatically on first run.
+
+### Development Installation
+
+```bash
 # Clone the repository
 git clone https://github.com/your-username/GraphRelax.git
 cd GraphRelax
 
-# Install GraphRelax and dependencies
+# Install in editable mode
 pip install -e .
-
-# Download LigandMPNN model weights (~40MB)
-./scripts/download_weights.sh
 ```
 
 ### Optional: Constrained Minimization
@@ -31,13 +37,37 @@ conda install -c conda-forge pdbfixer
 
 ```bash
 # CPU-only (smaller install, no GPU dependencies)
-pip install -e ".[cpu]"
+pip install "graphrelax[cpu]"
 
 # With CUDA 11 GPU support
-pip install -e ".[cuda11]"
+pip install "graphrelax[cuda11]"
 
 # With CUDA 12 GPU support
-pip install -e ".[cuda12]"
+pip install "graphrelax[cuda12]"
+```
+
+### Docker
+
+Run GraphRelax using Docker without installing dependencies:
+
+```bash
+# Pull the image
+docker pull ghcr.io/delalamo/graphrelax:latest
+
+# Run with input/output files
+docker run --rm -v $(pwd):/data ghcr.io/delalamo/graphrelax:latest \
+    -i /data/input.pdb -o /data/output.pdb
+
+# Design mode with 5 outputs
+docker run --rm -v $(pwd):/data ghcr.io/delalamo/graphrelax:latest \
+    -i /data/input.pdb -o /data/designed.pdb --design -n 5
+```
+
+Build locally:
+
+```bash
+docker build -t graphrelax .
+docker run --rm graphrelax --help
 ```
 
 ### Dependencies
