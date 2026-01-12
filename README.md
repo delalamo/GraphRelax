@@ -46,6 +46,30 @@ pip install "graphrelax[cuda11]"
 pip install "graphrelax[cuda12]"
 ```
 
+### Docker
+
+Run GraphRelax using Docker without installing dependencies:
+
+```bash
+# Pull the image
+docker pull ghcr.io/delalamo/graphrelax:latest
+
+# Run with input/output files
+docker run --rm -v $(pwd):/data ghcr.io/delalamo/graphrelax:latest \
+    -i /data/input.pdb -o /data/output.pdb
+
+# Design mode with 5 outputs
+docker run --rm -v $(pwd):/data ghcr.io/delalamo/graphrelax:latest \
+    -i /data/input.pdb -o /data/designed.pdb --design -n 5
+```
+
+Build locally:
+
+```bash
+docker build -t graphrelax .
+docker run --rm graphrelax --help
+```
+
 ### Dependencies
 
 Core dependencies (installed automatically via pip):
