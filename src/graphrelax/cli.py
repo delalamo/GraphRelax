@@ -17,6 +17,45 @@ def setup_logging(verbose: bool):
     )
 
 
+def _check_for_ligands(input_path: Path, fmt) -> bool:
+    """
+    Check if input structure has ligands (non-water HETATM records).
+
+    Args:
+        input_path: Path to input file
+        fmt: StructureFormat enum
+
+    Returns:
+        True if ligands are present
+    """
+    from graphrelax.structure_io import StructureFormat
+
+    water_residues = {"HOH", "WAT", "SOL", "TIP3", "TIP4", "SPC"}
+
+    if fmt == StructureFormat.PDB:
+        with open(input_path) as f:
+            for line in f:
+                if line.startswith("HETATM"):
+                    resname = line[17:20].strip()
+                    if resname not in water_residues:
+                        return True
+    else:
+        # CIF format - use BioPython
+        from Bio.PDB import MMCIFParser
+
+        parser = MMCIFParser(QUIET=True)
+        structure = parser.get_structure("check", str(input_path))
+        for model in structure:
+            for chain in model:
+                for residue in chain:
+                    hetflag = residue.id[0]
+                    if hetflag.startswith("H_"):
+                        resname = residue.resname.strip()
+                        if resname not in water_residues:
+                            return True
+    return False
+
+
 def create_parser() -> argparse.ArgumentParser:
     """Create argument parser."""
     parser = argparse.ArgumentParser(
@@ -56,16 +95,16 @@ Examples:
         "--input",
         type=Path,
         required=True,
-        metavar="PDB",
-        help="Input PDB file",
+        metavar="FILE",
+        help="Input structure file (PDB or CIF format)",
     )
     parser.add_argument(
         "-o",
         "--output",
         type=Path,
         required=True,
-        metavar="PDB",
-        help="Output PDB file (or prefix if -n > 1)",
+        metavar="FILE",
+        help="Output structure file (or prefix if -n > 1)",
     )
 
     # Mode selection (mutually exclusive)
@@ -219,6 +258,15 @@ def main(args=None) -> int:
         logger.error(f"Resfile not found: {opts.resfile}")
         return 1
 
+    # Validate input format
+    input_suffix = opts.input.suffix.lower()
+    if input_suffix not in (".pdb", ".cif", ".mmcif"):
+        logger.error(
+            f"Unsupported input format: {input_suffix}. "
+            "Supported formats: .pdb, .cif, .mmcif"
+        )
+        return 1
+
     # Import here to avoid slow startup from heavy dependencies
     from graphrelax.config import (
         DesignConfig,
@@ -227,6 +275,7 @@ def main(args=None) -> int:
         RelaxConfig,
     )
     from graphrelax.pipeline import Pipeline
+    from graphrelax.structure_io import detect_format
 
     # Determine mode
     if opts.repack_only:
@@ -240,16 +289,9 @@ def main(args=None) -> int:
     else:
         mode = PipelineMode.RELAX  # default
 
-    # Check if input PDB has ligands (HETATM records)
-    has_ligands = False
-    with open(opts.input) as f:
-        for line in f:
-            if line.startswith("HETATM"):
-                # Skip water molecules (HOH, WAT)
-                resname = line[17:20].strip()
-                if resname not in ("HOH", "WAT"):
-                    has_ligands = True
-                    break
+    # Check if input structure has ligands (HETATM records)
+    input_format = detect_format(opts.input)
+    has_ligands = _check_for_ligands(opts.input, input_format)
 
     # Validate: ligand_mpnn with ligands requires constrained minimization
     uses_relaxation = mode in (

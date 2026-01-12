@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 
+from graphrelax.structure_io import convert_pdb_to_cif
+
 
 @pytest.fixture
 def test_data_dir():
@@ -77,6 +79,20 @@ def small_peptide_pdb(tmp_path, small_peptide_pdb_string):
     return path
 
 
+@pytest.fixture
+def small_peptide_cif_string(small_peptide_pdb_string):
+    """A minimal 5-residue alanine peptide CIF string for testing."""
+    return convert_pdb_to_cif(small_peptide_pdb_string)
+
+
+@pytest.fixture
+def small_peptide_cif(tmp_path, small_peptide_cif_string):
+    """Create a small peptide CIF file for testing."""
+    path = tmp_path / "small_peptide.cif"
+    path.write_text(small_peptide_cif_string)
+    return path
+
+
 @pytest.fixture(scope="session")
 def ubiquitin_pdb(tmp_path_factory):
     """
@@ -127,6 +143,49 @@ def ubiquitin_pdb(tmp_path_factory):
         f.writelines(clean_lines)
 
     return pdb_path
+
+
+@pytest.fixture(scope="session")
+def ubiquitin_cif(tmp_path_factory):
+    """
+    Download 1UBQ (ubiquitin) in CIF format for integration testing.
+
+    Same cleaning as ubiquitin_pdb but in CIF format.
+    """
+    import urllib.request
+
+    from Bio.PDB import MMCIFIO, MMCIFParser, Select
+
+    cache_dir = tmp_path_factory.mktemp("cif_cache")
+    raw_cif_path = cache_dir / "1ubq_raw.cif"
+    cif_path = cache_dir / "1ubq.cif"
+
+    url = "https://files.rcsb.org/download/1UBQ.cif"
+    urllib.request.urlretrieve(url, raw_cif_path)
+
+    # Clean the CIF file using BioPython
+    class CleanSelect(Select):
+        def accept_residue(self, residue):
+            # Skip water and other heteroatoms
+            hetflag = residue.id[0]
+            if hetflag.startswith("H_") or hetflag == "W":
+                return False
+            return True
+
+        def accept_atom(self, atom):
+            # Keep only first conformer
+            if atom.altloc not in (" ", "A"):
+                return False
+            return True
+
+    parser = MMCIFParser(QUIET=True)
+    structure = parser.get_structure("1ubq", str(raw_cif_path))
+
+    cif_io = MMCIFIO()
+    cif_io.set_structure(structure)
+    cif_io.save(str(cif_path), CleanSelect())
+
+    return cif_path
 
 
 @pytest.fixture(scope="session")

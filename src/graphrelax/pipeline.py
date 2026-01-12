@@ -9,6 +9,13 @@ from graphrelax.config import PipelineConfig, PipelineMode
 from graphrelax.designer import Designer
 from graphrelax.relaxer import Relaxer
 from graphrelax.resfile import DesignSpec, ResfileParser
+from graphrelax.structure_io import (
+    StructureFormat,
+    convert_to_format,
+    detect_format,
+    ensure_pdb_format,
+    get_output_format,
+)
 from graphrelax.utils import (
     compute_ligandmpnn_score,
     compute_sequence_recovery,
@@ -51,13 +58,21 @@ class Pipeline:
         Run the full pipeline.
 
         Args:
-            input_pdb: Input PDB file path
-            output_pdb: Output PDB file path (or prefix if n_outputs > 1)
+            input_pdb: Input structure file path (PDB or CIF)
+            output_pdb: Output structure file path (or prefix if n_outputs > 1)
             resfile: Optional Rosetta resfile for residue control
 
         Returns:
             Dictionary with pipeline results and metrics
         """
+        # Detect input format and determine output format from file extensions
+        input_format = detect_format(input_pdb)
+        target_format = get_output_format(input_pdb, output_pdb)
+        logger.info(
+            f"Input format: {input_format.value}, "
+            f"Output format: {target_format.value}"
+        )
+
         # Parse resfile if provided
         design_spec = None
         if resfile:
@@ -85,6 +100,7 @@ class Pipeline:
                 input_pdb=input_pdb,
                 design_spec=design_spec,
                 design_all=design_all,
+                input_format=input_format,
             )
 
             # Format output path
@@ -92,8 +108,13 @@ class Pipeline:
                 output_pdb, output_idx, self.config.n_outputs
             )
 
-            # Save final structure
-            save_pdb_string(result["final_pdb"], out_path)
+            # Convert to target format if needed and save
+            final_structure = result["final_pdb"]
+            if target_format != StructureFormat.PDB:
+                final_structure = convert_to_format(
+                    final_structure, target_format
+                )
+            save_pdb_string(final_structure, out_path)
 
             result["output_path"] = out_path
             all_results.append(result)
@@ -139,6 +160,7 @@ class Pipeline:
         input_pdb: Path,
         design_spec: Optional[DesignSpec],
         design_all: bool,
+        input_format: StructureFormat = StructureFormat.PDB,
     ) -> dict:
         """Run pipeline for a single output."""
         result = {
@@ -147,18 +169,21 @@ class Pipeline:
             "sequence": None,
         }
 
-        # Read input PDB
+        # Read input structure
         with open(input_pdb) as f:
-            current_pdb = f.read()
+            current_structure = f.read()
 
         # Remove waters if requested
         if self.config.remove_waters:
-            original_lines = len(current_pdb.splitlines())
-            current_pdb = remove_waters(current_pdb)
-            new_lines = len(current_pdb.splitlines())
+            original_lines = len(current_structure.splitlines())
+            current_structure = remove_waters(current_structure, input_format)
+            new_lines = len(current_structure.splitlines())
             removed = original_lines - new_lines
             if removed > 0:
                 logger.info(f"Removed {removed} water-related lines from input")
+
+        # Convert to PDB format for internal processing if needed
+        current_pdb = ensure_pdb_format(current_structure, input_pdb)
 
         # Store input as temp file for processing
         with tempfile.NamedTemporaryFile(

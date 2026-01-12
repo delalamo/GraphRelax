@@ -882,3 +882,103 @@ class TestPipelineFullWorkflow:
         # Should have header and 2 data lines
         lines = [ln for ln in content.strip().split("\n") if ln]
         assert len(lines) >= 3  # header + 2 entries
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+class TestCIFFormatSupport:
+    """Tests for CIF file format support."""
+
+    def test_cif_input_pdb_output(self, small_peptide_cif, tmp_path):
+        """Test CIF input with PDB output."""
+        from graphrelax.pipeline import Pipeline
+
+        config = PipelineConfig(
+            mode=PipelineMode.NO_REPACK,
+            n_iterations=1,
+            n_outputs=1,
+            relax=RelaxConfig(max_iterations=50),
+        )
+        pipeline = Pipeline(config)
+
+        output_pdb = tmp_path / "output.pdb"
+        pipeline.run(
+            input_pdb=small_peptide_cif,
+            output_pdb=output_pdb,
+        )
+
+        assert output_pdb.exists()
+        content = output_pdb.read_text()
+        # Should be PDB format
+        assert "ATOM" in content
+        assert not content.startswith("data_")
+
+    def test_cif_input_cif_output(self, small_peptide_cif, tmp_path):
+        """Test CIF input with CIF output (format preserved)."""
+        from graphrelax.pipeline import Pipeline
+
+        config = PipelineConfig(
+            mode=PipelineMode.NO_REPACK,
+            n_iterations=1,
+            n_outputs=1,
+            relax=RelaxConfig(max_iterations=50),
+        )
+        pipeline = Pipeline(config)
+
+        output_cif = tmp_path / "output.cif"
+        pipeline.run(
+            input_pdb=small_peptide_cif,
+            output_pdb=output_cif,
+        )
+
+        assert output_cif.exists()
+        content = output_cif.read_text()
+        # Should be CIF format
+        assert content.startswith("data_")
+        assert "_atom_site" in content
+
+    def test_pdb_input_cif_output(self, small_peptide_pdb, tmp_path):
+        """Test PDB input with CIF output (format conversion)."""
+        from graphrelax.pipeline import Pipeline
+
+        config = PipelineConfig(
+            mode=PipelineMode.NO_REPACK,
+            n_iterations=1,
+            n_outputs=1,
+            relax=RelaxConfig(max_iterations=50),
+        )
+        pipeline = Pipeline(config)
+
+        output_cif = tmp_path / "output.cif"
+        pipeline.run(
+            input_pdb=small_peptide_pdb,
+            output_pdb=output_cif,
+        )
+
+        assert output_cif.exists()
+        content = output_cif.read_text()
+        # Should be CIF format
+        assert content.startswith("data_")
+
+    def test_cif_multiple_outputs(self, small_peptide_cif, tmp_path):
+        """Test CIF input with multiple outputs."""
+        from graphrelax.pipeline import Pipeline
+
+        config = PipelineConfig(
+            mode=PipelineMode.NO_REPACK,
+            n_iterations=1,
+            n_outputs=2,
+            relax=RelaxConfig(max_iterations=50),
+        )
+        pipeline = Pipeline(config)
+
+        output_cif = tmp_path / "output.cif"
+        result = pipeline.run(
+            input_pdb=small_peptide_cif,
+            output_pdb=output_cif,
+        )
+
+        # Should create output_1.cif and output_2.cif
+        assert (tmp_path / "output_1.cif").exists()
+        assert (tmp_path / "output_2.cif").exists()
+        assert len(result["outputs"]) == 2

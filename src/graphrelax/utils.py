@@ -5,10 +5,31 @@ import math
 from pathlib import Path
 from typing import Optional
 
+from graphrelax.structure_io import StructureFormat
+
 logger = logging.getLogger(__name__)
 
 
-def remove_waters(pdb_string: str) -> str:
+def remove_waters(structure_string: str, fmt: StructureFormat = None) -> str:
+    """
+    Remove water molecules from a structure string.
+
+    Supports both PDB and CIF formats. If format is not specified,
+    assumes PDB format for backwards compatibility.
+
+    Args:
+        structure_string: Structure file contents as a string
+        fmt: Structure format (PDB or CIF). Defaults to PDB.
+
+    Returns:
+        Structure string with water molecules removed
+    """
+    if fmt == StructureFormat.CIF:
+        return _remove_waters_cif(structure_string)
+    return _remove_waters_pdb(structure_string)
+
+
+def _remove_waters_pdb(pdb_string: str) -> str:
     """
     Remove water molecules (HOH, WAT, SOL) from a PDB string.
 
@@ -39,6 +60,50 @@ def remove_waters(pdb_string: str) -> str:
         filtered_lines.append(line)
 
     return "\n".join(filtered_lines)
+
+
+def _remove_waters_cif(cif_string: str) -> str:
+    """
+    Remove water molecules from a CIF string.
+
+    Args:
+        cif_string: CIF file contents as a string
+
+    Returns:
+        CIF string with water molecules removed
+    """
+    import io
+    import tempfile
+
+    from Bio.PDB import MMCIFIO, MMCIFParser, Select
+
+    water_residues = {"HOH", "WAT", "SOL", "TIP3", "TIP4", "SPC"}
+
+    class WaterRemover(Select):
+        def accept_residue(self, residue):
+            return residue.get_resname().strip() not in water_residues
+
+    # MMCIFParser requires a file path
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".cif", delete=False
+    ) as tmp:
+        tmp.write(cif_string)
+        tmp_path = tmp.name
+
+    try:
+        from pathlib import Path
+
+        parser = MMCIFParser(QUIET=True)
+        structure = parser.get_structure("structure", tmp_path)
+
+        cif_io = MMCIFIO()
+        cif_io.set_structure(structure)
+
+        output = io.StringIO()
+        cif_io.save(output, WaterRemover())
+        return output.getvalue()
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
 
 
 def compute_sequence_recovery(seq1: str, seq2: str) -> float:
