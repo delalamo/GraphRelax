@@ -212,3 +212,6 @@ src/graphrelax/LigandMPNN/model_params/*.pt
 
 # Auto-generated version file (setuptools-scm)
 src/graphrelax/_version.py
+
+# Misc
+.DS_Store
