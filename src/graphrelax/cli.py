@@ -205,6 +205,15 @@ Examples:
         metavar="N",
         help="Max L-BFGS iterations, 0=unlimited (default: 0)",
     )
+    relax_group.add_argument(
+        "--no-split-gaps",
+        action="store_true",
+        help=(
+            "Disable automatic chain splitting at gaps. "
+            "By default, chains are split at detected gaps (missing residues) "
+            "to prevent artificial gap closure during minimization."
+        ),
+    )
 
     # Scoring options
     score_group = parser.add_argument_group("Scoring options")
@@ -323,6 +332,7 @@ def main(args=None) -> int:
         stiffness=opts.stiffness,
         max_iterations=opts.max_iterations,
         constrained=opts.constrained_minimization,
+        split_chains_at_gaps=not opts.no_split_gaps,
     )
 
     pipeline_config = PipelineConfig(
