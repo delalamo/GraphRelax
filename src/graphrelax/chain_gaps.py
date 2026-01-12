@@ -171,9 +171,11 @@ def split_chains_at_gaps(
     current_chain_map = {}  # original_chain_id -> current_new_chain_id
     next_id_idx = 0
 
+    # Track which gap starts we've already processed
+    processed_gap_starts = set()
+
     # Process PDB line by line
     output_lines = []
-    current_residue = {}  # chain_id -> (resnum, icode)
 
     for line in pdb_string.split("\n"):
         if line.startswith(("ATOM", "HETATM")) and len(line) > 26:
@@ -181,8 +183,12 @@ def split_chains_at_gaps(
             resnum = int(line[22:26].strip())
             icode = line[26].strip() if len(line) > 26 else ""
 
+            gap_key = (chain_id, resnum, icode)
+
             # Check if this residue starts a new segment (at a gap)
-            if (chain_id, resnum, icode) in gap_starts:
+            # Only process each gap start once
+            if gap_key in gap_starts and gap_key not in processed_gap_starts:
+                processed_gap_starts.add(gap_key)
                 # Assign a new chain ID for this segment
                 if next_id_idx < len(available_ids):
                     new_chain_id = available_ids[next_id_idx]
@@ -208,8 +214,6 @@ def split_chains_at_gaps(
             # Replace chain ID in line
             new_chain_id = current_chain_map[chain_id]
             line = line[:21] + new_chain_id + line[22:]
-
-            current_residue[chain_id] = (resnum, icode)
 
         elif line.startswith("TER") and len(line) > 21:
             # Update TER record chain ID too
