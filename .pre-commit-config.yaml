@@ -22,7 +22,8 @@ repos:
           - "--max-line-length=80"
           - "--extend-ignore=E203,W503"
           # Allow long lines in test files containing PDB fixture data
-          - "--per-file-ignores=tests/test_idealize.py:E501"
+          # Allow E402 (imports not at top) for test_idealize.py due to pytest.importorskip
+          - "--per-file-ignores=tests/test_idealize.py:E501 E402"
 
   - repo: https://github.com/PyCQA/pylint
     rev: v3.3.7

@@ -6,6 +6,9 @@ import math
 import pytest
 from Bio.PDB import PDBParser
 
+# Skip entire module if pdbfixer is not available (conda-only dependency)
+pdbfixer = pytest.importorskip("pdbfixer", reason="pdbfixer not installed")
+
 from graphrelax.config import IdealizeConfig
 from graphrelax.idealize import (
     DihedralAngles,
