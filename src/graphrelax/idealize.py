@@ -592,15 +592,8 @@ def minimize_with_ligands(
     openff_molecules = []
     for ligand in ligands:
         smiles = user_smiles.get(ligand.resname)
-        try:
-            mol = create_openff_molecule(ligand, smiles=smiles)
-            openff_molecules.append(mol)
-        except Exception as e:
-            logger.warning(
-                f"Could not parameterize ligand {ligand.resname}: {e}. "
-                "Ligand will be excluded from minimization."
-            )
-            continue
+        mol = create_openff_molecule(ligand, smiles=smiles)
+        openff_molecules.append(mol)
 
     # Create combined topology using Modeller
     modeller = openmm_app.Modeller(fixer.topology, fixer.positions)
