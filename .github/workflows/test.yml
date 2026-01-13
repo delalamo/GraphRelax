@@ -14,6 +14,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf /usr/local/lib/android
+          df -h
+
       - name: Setup Miniconda
         uses: conda-incubator/setup-miniconda@v3
         with:
@@ -22,14 +30,15 @@ jobs:
           channel-priority: strict
           activate-environment: test
           auto-activate-base: false
+          miniforge-version: latest
 
       - name: Install conda dependencies
         run: |
-          conda install -y pdbfixer
+          conda install -y --no-update-deps pdbfixer
 
       - name: Install pip dependencies
         run: |
-          pip install -e .[test]
+          pip install --no-cache-dir -e .[test]
 
       - name: Run unit tests with coverage
         run: |
