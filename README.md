@@ -6,32 +6,37 @@ GraphRelax combines **LigandMPNN** (for sequence design and side-chain packing) 
 
 ## Installation
 
+GraphRelax requires pdbfixer, which is only available via conda-forge. We recommend using conda/mamba for installation.
+
+### From PyPI (Latest Release)
+
 ```bash
-# Install from PyPI
+# First, install pdbfixer via conda (required)
+conda install -c conda-forge pdbfixer
+
+# Then install graphrelax from PyPI
 pip install graphrelax
 ```
 
-LigandMPNN model weights (~40MB) are downloaded automatically on first run.
+This installs the latest stable release.
 
-### Development Installation
+### From Source (Latest Development Version)
 
 ```bash
+# First, install pdbfixer via conda (required)
+conda install -c conda-forge pdbfixer
+
 # Clone the repository
-git clone https://github.com/your-username/GraphRelax.git
+git clone https://github.com/delalamo/GraphRelax.git
 cd GraphRelax
 
 # Install in editable mode
 pip install -e .
 ```
 
-### Optional: Constrained Minimization and Pre-Idealization
+This installs the latest development version with all recent changes.
 
-If you want to use `--constrained-minimization` mode (AlphaFold-style relaxation with position restraints and violation checking) or `--pre-idealize` (backbone geometry correction), you also need pdbfixer:
-
-```bash
-# pdbfixer is only available via conda-forge, not PyPI
-conda install -c conda-forge pdbfixer
-```
+LigandMPNN model weights (~40MB) are downloaded automatically on first run.
 
 ### Platform-specific Installation
 
@@ -84,7 +89,7 @@ Core dependencies (installed automatically via pip):
 - absl-py
 - ml-collections
 
-Optional (for `--constrained-minimization` and `--pre-idealize`):
+Required (must be installed separately via conda):
 
 - pdbfixer (conda-forge only, not on PyPI)
 
