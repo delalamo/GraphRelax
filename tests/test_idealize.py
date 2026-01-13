@@ -281,6 +281,108 @@ class TestIdealizeIntegration:
         config = IdealizeConfig(enabled=False)
         assert not config.enabled
 
+    def test_minimize_with_constraints_basic(self, small_peptide_pdb_string):
+        """minimize_with_constraints should run without errors."""
+        from graphrelax.idealize import minimize_with_constraints
+
+        # This test ensures the function doesn't crash
+        # It would have caught the addMissingResidues() AttributeError
+        result = minimize_with_constraints(
+            small_peptide_pdb_string,
+            stiffness=10.0,
+            add_missing_residues=False,
+        )
+
+        assert "ATOM" in result
+        assert "END" in result
+
+    def test_minimize_with_constraints_add_missing(
+        self, small_peptide_pdb_string
+    ):
+        """minimize_with_constraints should handle add_missing_residues=True."""
+        from graphrelax.idealize import minimize_with_constraints
+
+        # Test with add_missing_residues=True (the default that caused the bug)
+        result = minimize_with_constraints(
+            small_peptide_pdb_string,
+            stiffness=10.0,
+            add_missing_residues=True,
+        )
+
+        assert "ATOM" in result
+        assert "END" in result
+
+    def test_minimize_with_seqres_missing_residues(self):
+        """minimize_with_constraints should handle PDB with SEQRES missing residues."""
+        from graphrelax.idealize import minimize_with_constraints
+
+        # PDB with SEQRES indicating 5 residues but only 3 present (missing 1 and 5)
+        # This tests the actual missing residue detection path
+        pdb_with_seqres = (  # noqa: E501
+            "SEQRES   1 A    5  ALA ALA ALA ALA ALA\n"
+            "ATOM      1  N   ALA A   2       1.458   0.000   0.000  1.00  0.00           N\n"
+            "ATOM      2  CA  ALA A   2       2.916   0.000   0.000  1.00  0.00           C\n"
+            "ATOM      3  C   ALA A   2       3.467   1.420   0.000  1.00  0.00           C\n"
+            "ATOM      4  O   ALA A   2       2.704   2.390   0.000  1.00  0.00           O\n"
+            "ATOM      5  CB  ALA A   2       3.444  -0.760  -1.216  1.00  0.00           C\n"
+            "ATOM      6  N   ALA A   3       4.784   1.540   0.000  1.00  0.00           N\n"
+            "ATOM      7  CA  ALA A   3       5.399   2.861   0.000  1.00  0.00           C\n"
+            "ATOM      8  C   ALA A   3       6.917   2.789   0.000  1.00  0.00           C\n"
+            "ATOM      9  O   ALA A   3       7.523   1.719   0.000  1.00  0.00           O\n"
+            "ATOM     10  CB  ALA A   3       4.931   3.699   1.186  1.00  0.00           C\n"
+            "ATOM     11  N   ALA A   4       7.523   3.969   0.000  1.00  0.00           N\n"
+            "ATOM     12  CA  ALA A   4       8.977   4.109   0.000  1.00  0.00           C\n"
+            "ATOM     13  C   ALA A   4       9.528   5.529   0.000  1.00  0.00           C\n"
+            "ATOM     14  O   ALA A   4       8.765   6.499   0.000  1.00  0.00           O\n"
+            "ATOM     15  CB  ALA A   4       9.505   3.349  -1.216  1.00  0.00           C\n"
+            "END\n"
+        )
+
+        # Test with add_missing_residues=True - pdbfixer should detect missing
+        # residues from SEQRES and handle them
+        result = minimize_with_constraints(
+            pdb_with_seqres,
+            stiffness=10.0,
+            add_missing_residues=True,
+        )
+
+        assert "ATOM" in result
+        assert "END" in result
+
+    def test_minimize_with_seqres_skip_missing(self):
+        """minimize_with_constraints should skip missing residues when disabled."""
+        from graphrelax.idealize import minimize_with_constraints
+
+        # Same PDB with SEQRES but we'll skip adding missing residues
+        pdb_with_seqres = (  # noqa: E501
+            "SEQRES   1 A    5  ALA ALA ALA ALA ALA\n"
+            "ATOM      1  N   ALA A   2       1.458   0.000   0.000  1.00  0.00           N\n"
+            "ATOM      2  CA  ALA A   2       2.916   0.000   0.000  1.00  0.00           C\n"
+            "ATOM      3  C   ALA A   2       3.467   1.420   0.000  1.00  0.00           C\n"
+            "ATOM      4  O   ALA A   2       2.704   2.390   0.000  1.00  0.00           O\n"
+            "ATOM      5  CB  ALA A   2       3.444  -0.760  -1.216  1.00  0.00           C\n"
+            "ATOM      6  N   ALA A   3       4.784   1.540   0.000  1.00  0.00           N\n"
+            "ATOM      7  CA  ALA A   3       5.399   2.861   0.000  1.00  0.00           C\n"
+            "ATOM      8  C   ALA A   3       6.917   2.789   0.000  1.00  0.00           C\n"
+            "ATOM      9  O   ALA A   3       7.523   1.719   0.000  1.00  0.00           O\n"
+            "ATOM     10  CB  ALA A   3       4.931   3.699   1.186  1.00  0.00           C\n"
+            "ATOM     11  N   ALA A   4       7.523   3.969   0.000  1.00  0.00           N\n"
+            "ATOM     12  CA  ALA A   4       8.977   4.109   0.000  1.00  0.00           C\n"
+            "ATOM     13  C   ALA A   4       9.528   5.529   0.000  1.00  0.00           C\n"
+            "ATOM     14  O   ALA A   4       8.765   6.499   0.000  1.00  0.00           O\n"
+            "ATOM     15  CB  ALA A   4       9.505   3.349  -1.216  1.00  0.00           C\n"
+            "END\n"
+        )
+
+        result = minimize_with_constraints(
+            pdb_with_seqres,
+            stiffness=10.0,
+            add_missing_residues=False,
+        )
+
+        assert "ATOM" in result
+        assert "END" in result
+
 
 @pytest.mark.integration
 class TestIdealizeWithChainGaps:
