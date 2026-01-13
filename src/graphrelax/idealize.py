@@ -615,5 +615,65 @@ def idealize_structure(
     # Step 7: Restore ligands
     final_pdb = restore_ligands(minimized_pdb, ligand_lines)
 
+    # Step 8: Renumber residues sequentially per chain
+    # This fixes issues where pdbfixer assigns non-sequential numbers
+    final_pdb = renumber_residues_sequential(final_pdb)
+
     logger.info("Structure idealization complete")
     return final_pdb, gaps
+
+
+def renumber_residues_sequential(pdb_string: str) -> str:
+    """
+    Renumber residues sequentially starting from 1 for each chain.
+
+    This fixes issues where pdbfixer assigns non-sequential residue numbers
+    when adding missing residues. Sequential numbering is required for
+    proper chain gap detection and LigandMPNN processing.
+
+    HETATM records are renumbered to continue after the last ATOM residue
+    in each chain.
+
+    Args:
+        pdb_string: PDB file contents
+
+    Returns:
+        PDB string with sequential residue numbering
+    """
+    lines = pdb_string.split("\n")
+    output_lines = []
+
+    # Track residue numbering per chain
+    chain_residue_count = {}  # chain_id -> next_resnum
+    residue_map = {}  # (chain_id, old_resnum, icode) -> new_resnum
+
+    # First pass: assign new numbers to unique residues
+    for line in lines:
+        if line.startswith("ATOM") or line.startswith("HETATM"):
+            chain_id = line[21]
+            old_resnum = line[22:26].strip()
+            icode = line[26]
+            key = (chain_id, old_resnum, icode)
+
+            if key not in residue_map:
+                if chain_id not in chain_residue_count:
+                    chain_residue_count[chain_id] = 1
+                residue_map[key] = chain_residue_count[chain_id]
+                chain_residue_count[chain_id] += 1
+
+    # Second pass: apply new numbers
+    for line in lines:
+        if line.startswith("ATOM") or line.startswith("HETATM"):
+            chain_id = line[21]
+            old_resnum = line[22:26].strip()
+            icode = line[26]
+            key = (chain_id, old_resnum, icode)
+
+            new_resnum = residue_map[key]
+            # Format residue number right-justified in columns 23-26
+            new_line = line[:22] + f"{new_resnum:>4}" + " " + line[27:]
+            output_lines.append(new_line)
+        else:
+            output_lines.append(line)
+
+    return "\n".join(output_lines)

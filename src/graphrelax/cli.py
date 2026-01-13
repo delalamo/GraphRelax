@@ -456,6 +456,15 @@ def main(args=None) -> int:
         else:
             logger.info("Ligands auto-detected, using openmmforcefields")
 
+    # Warn about resfile + idealization interaction
+    if opts.resfile and not opts.no_idealize:
+        logger.warning(
+            "Using resfile with idealization enabled. Residue numbers in "
+            "the resfile should match the idealized structure (sequential "
+            "numbering starting from 1). Use --no-idealize or "
+            "--ignore-missing-residues to preserve original numbering."
+        )
+
     logger.info(f"Running GraphRelax in {mode.value} mode")
     logger.info(f"Input: {opts.input}")
     logger.info(f"Output: {opts.output}")

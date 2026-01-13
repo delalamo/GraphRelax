@@ -249,7 +249,12 @@ By default, GraphRelax idealizes backbone geometry before processing. This corre
 4. Runs constrained minimization to relieve local strain
 5. By default, closes chain breaks (gaps) in the structure
 
-**Note:** By default, GraphRelax adds missing residues from SEQRES records during both relaxation and idealization. This may change residue numbering if the input PDB is missing N/C-terminal residues. Use `--ignore-missing-residues` to preserve original numbering for resfile compatibility.
+**Important:** By default, GraphRelax adds missing residues from SEQRES records during idealization and renumbers all residues sequentially starting from 1 for each chain. This ensures consistent numbering regardless of the original PDB numbering scheme.
+
+If you're using a resfile, the residue numbers must match the **idealized** structure numbering (sequential from 1), not the original PDB numbering. To preserve original numbering for resfile compatibility, use one of these options:
+
+- `--ignore-missing-residues`: Keep original numbering, don't add missing residues
+- `--no-idealize`: Skip idealization entirely (preserves original geometry and numbering)
 
 ```bash
 # Default: idealization is enabled
