@@ -51,22 +51,36 @@ class LigandInfo:
     smiles: Optional[str] = None
 
 
-def extract_ligands_from_pdb(pdb_string: str) -> Tuple[str, List[LigandInfo]]:
+def extract_ligands_from_pdb(
+    pdb_string: str,
+    exclude_artifacts: bool = True,
+) -> Tuple[str, List[LigandInfo]]:
     """
     Separate protein ATOM records from ligand HETATM records.
 
+    By default, crystallography artifacts (buffers, cryoprotectants, detergents,
+    lipids) are excluded from the ligand list since they cannot be meaningfully
+    parameterized for minimization.
+
     Args:
         pdb_string: Full PDB string with protein and ligands
+        exclude_artifacts: If True, skip known crystallography artifacts
 
     Returns:
         Tuple of (protein_only_pdb, list_of_ligand_info)
     """
+    # Import here to avoid circular imports
+    if exclude_artifacts:
+        from graphrelax.artifacts import CRYSTALLOGRAPHY_ARTIFACTS
+    else:
+        CRYSTALLOGRAPHY_ARTIFACTS = set()
+
     protein_lines = []
     ligand_lines_by_residue = {}
 
     for line in pdb_string.split("\n"):
         if line.startswith("HETATM"):
-            resname = line[17:20].strip()
+            resname = line[17:20].strip().upper()
             chain_id = line[21] if len(line) > 21 else " "
             try:
                 resnum = int(line[22:26].strip())
@@ -75,6 +89,10 @@ def extract_ligands_from_pdb(pdb_string: str) -> Tuple[str, List[LigandInfo]]:
 
             # Skip water
             if resname in WATER_RESIDUES:
+                continue
+
+            # Skip known artifacts (they won't be parameterized)
+            if resname in CRYSTALLOGRAPHY_ARTIFACTS:
                 continue
 
             key = (chain_id, resnum, resname)

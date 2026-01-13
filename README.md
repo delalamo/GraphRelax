@@ -6,12 +6,61 @@ GraphRelax combines **LigandMPNN** (for sequence design and side-chain packing) 
 
 ## Installation
 
+### Quick Start (Recommended)
+
+The easiest way to install GraphRelax with all dependencies is using mamba (much faster than conda):
+
 ```bash
-# Install from PyPI
+# Install mamba if you don't have it (or use micromamba)
+conda install -n base -c conda-forge mamba
+
+# Create environment from file
+mamba env create -f environment.yml
+conda activate graphrelax
+
+# Install GraphRelax
+pip install -e .
+```
+
+Or with **micromamba** (standalone, no conda required):
+
+```bash
+# Install micromamba (see https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html)
+# Then:
+micromamba create -f environment.yml
+micromamba activate graphrelax
+pip install -e .
+```
+
+This installs all dependencies including ligand support.
+
+### Standard Installation
+
+For basic usage without ligand support:
+
+```bash
 pip install graphrelax
 ```
 
 LigandMPNN model weights (~40MB) are downloaded automatically on first run.
+
+### Full Installation (with Ligand Support)
+
+Some dependencies are only available via conda-forge and must be installed before pip:
+
+```bash
+# Step 1: Install conda-forge dependencies (use mamba for speed)
+mamba install -c conda-forge \
+    pdbfixer \
+    openmmforcefields>=0.13.0 \
+    openff-toolkit>=0.14.0 \
+    rdkit>=2023.09.1
+
+# Step 2: Install GraphRelax
+pip install graphrelax
+```
+
+> **Note:** `mamba` is a drop-in replacement for `conda` that's 10-100x faster. Install it with `conda install -n base -c conda-forge mamba`, or use `micromamba` as a standalone tool.
 
 ### Development Installation
 
@@ -20,31 +69,39 @@ LigandMPNN model weights (~40MB) are downloaded automatically on first run.
 git clone https://github.com/your-username/GraphRelax.git
 cd GraphRelax
 
-# Install in editable mode
+# Option A: Use environment.yml with mamba (recommended)
+mamba env create -f environment.yml
+conda activate graphrelax
+pip install -e .
+
+# Option B: Manual installation
+mamba install -c conda-forge pdbfixer openmmforcefields openff-toolkit rdkit
 pip install -e .
 ```
 
-### Optional: Constrained Minimization
+### Dependencies
 
-If you want to use `--constrained-minimization` mode (AlphaFold-style relaxation with position restraints and violation checking), you also need pdbfixer:
+#### Pip packages (installed automatically)
 
-```bash
-# pdbfixer is only available via conda-forge, not PyPI
-conda install -c conda-forge pdbfixer
-```
+| Package        | Version | Purpose                  |
+| -------------- | ------- | ------------------------ |
+| torch          | >= 2.0  | Neural network inference |
+| numpy          | < 2     | Array operations         |
+| openmm         | latest  | Molecular dynamics       |
+| biopython      | latest  | Structure parsing        |
+| prody          | latest  | Protein analysis         |
+| absl-py        | latest  | Configuration            |
+| ml-collections | latest  | Configuration            |
+| dm-tree        | latest  | Nested data structures   |
 
-### Platform-specific Installation
+#### Conda-forge packages (manual installation required)
 
-```bash
-# CPU-only (smaller install, no GPU dependencies)
-pip install "graphrelax[cpu]"
-
-# With CUDA 11 GPU support
-pip install "graphrelax[cuda11]"
-
-# With CUDA 12 GPU support
-pip install "graphrelax[cuda12]"
-```
+| Package           | Version      | Purpose                     | Required for                 |
+| ----------------- | ------------ | --------------------------- | ---------------------------- |
+| pdbfixer          | latest       | Structure preparation       | `--constrained-minimization` |
+| openmmforcefields | >= 0.13.0    | Small molecule force fields | `--include-ligands`          |
+| openff-toolkit    | >= 0.14.0    | OpenFF Molecule creation    | `--include-ligands`          |
+| rdkit             | >= 2023.09.1 | Bond perception from PDB    | `--include-ligands`          |
 
 ### Docker
 
@@ -69,24 +126,6 @@ Build locally:
 docker build -t graphrelax .
 docker run --rm graphrelax --help
 ```
-
-### Dependencies
-
-Core dependencies (installed automatically via pip):
-
-- Python >= 3.9
-- PyTorch >= 2.0
-- NumPy < 2.0 (PyTorch <2.5 is incompatible with NumPy 2.x)
-- OpenMM
-- BioPython
-- ProDy
-- dm-tree
-- absl-py
-- ml-collections
-
-Optional (for `--constrained-minimization` only):
-
-- pdbfixer (conda-forge only, not on PyPI)
 
 ## Features
 
@@ -165,23 +204,77 @@ graphrelax -i input.pdb -o relaxed.pdb --constrained-minimization --stiffness 5.
 | Default (unconstrained)      | No                  | No                 | Fast   | No                |
 | `--constrained-minimization` | Yes (harmonic)      | Yes                | Slower | Yes               |
 
-**Important:** When your input PDB contains ligands or other non-standard residues (HETATM records other than water), you **must** use `--constrained-minimization`. The unconstrained mode uses AMBER force field parameters which don't include templates for non-standard molecules. Constrained mode uses OpenFold's AmberRelaxation which can handle ligands properly.
+### Crystallography Artifact Removal
+
+By default, GraphRelax **automatically removes** common crystallography and cryo-EM artifacts from input structures:
+
+- **Buffers**: SO4, PO4, CIT, ACT, MES, HEPES, Tris, etc.
+- **Cryoprotectants**: GOL (glycerol), EDO (ethylene glycol), MPD, PEG variants, DMSO
+- **Detergents**: DDM, OG, LDAO, CHAPS, SDS, etc.
+- **Lipids/Fatty acids**: PLM (palmitic), MYR (myristic), OLA (oleic), etc.
+- **Reducing agents**: BME, DTT
+- **Halide ions**: CL, BR, IOD
+
+**Biologically relevant metal ions** (ZN, MG, CA, FE, MN, CU, etc.) are **preserved**.
+
+```bash
+# Artifacts are removed by default
+graphrelax -i crystal_structure.pdb -o relaxed.pdb
+
+# Keep all HETATM records including artifacts
+graphrelax -i crystal_structure.pdb -o relaxed.pdb --keep-all-ligands
+
+# Keep specific artifacts that you need
+graphrelax -i crystal_structure.pdb -o relaxed.pdb --keep-ligand GOL --keep-ligand SO4
+```
 
 ### Working with Ligands
 
-When designing proteins with bound ligands (e.g., heme, cofactors, small molecules), use `ligand_mpnn` model type with constrained minimization:
+Biologically relevant ligands (cofactors, substrates, inhibitors) are **auto-detected** and parameterized using openmmforcefields. No special flags are needed.
 
 ```bash
-# Design around a ligand
-graphrelax -i protein_with_ligand.pdb -o designed.pdb \
-    --design --model-type ligand_mpnn --constrained-minimization
+# Ligands are automatically included and parameterized
+graphrelax -i protein_with_ligand.pdb -o designed.pdb --design
 
-# Repack side chains around a ligand
-graphrelax -i protein_with_ligand.pdb -o repacked.pdb \
-    --relax --model-type ligand_mpnn --constrained-minimization
+# Choose a specific force field for ligands
+graphrelax -i protein_with_ligand.pdb -o designed.pdb \
+    --ligand-forcefield gaff-2.11
+
+# Provide SMILES for unknown ligands
+graphrelax -i protein_with_ligand.pdb -o designed.pdb \
+    --ligand-smiles "LIG:c1ccccc1"
+
+# Strip all ligands (protein-only processing)
+graphrelax -i protein_with_ligand.pdb -o designed.pdb --ignore-ligands
 ```
 
-**Note:** If you attempt to use unconstrained minimization with a PDB containing ligands, GraphRelax will exit with an error message directing you to use `--constrained-minimization`.
+**Requires:** `conda install -c conda-forge openmmforcefields openff-toolkit rdkit`
+
+For design around ligands, use `ligand_mpnn` model type:
+
+```bash
+graphrelax -i protein_with_ligand.pdb -o designed.pdb \
+    --design --model-type ligand_mpnn
+```
+
+#### Ligand Force Field Options
+
+| Force Field     | Flag                                 | Description                |
+| --------------- | ------------------------------------ | -------------------------- |
+| OpenFF Sage 2.0 | `--ligand-forcefield openff-2.0.0`   | Modern, accurate (default) |
+| GAFF 2.11       | `--ligand-forcefield gaff-2.11`      | Well-tested, robust        |
+| Espaloma 0.3    | `--ligand-forcefield espaloma-0.3.0` | ML-based, fast             |
+
+#### Alternative: Constrained Minimization
+
+Use `--constrained-minimization` for position-restrained minimization (does not require openmmforcefields):
+
+```bash
+graphrelax -i protein_with_ligand.pdb -o designed.pdb \
+    --design --constrained-minimization
+```
+
+**Requires:** `conda install -c conda-forge pdbfixer`
 
 ### Resfile Format
 
@@ -247,13 +340,22 @@ Relaxation options:
   --constrained-minimization  Use constrained minimization with position
                               restraints (AlphaFold-style). Default is
                               unconstrained. Requires pdbfixer.
-                              **Required when input PDB contains ligands.**
   --stiffness K         Restraint stiffness in kcal/mol/A^2 (default: 10.0)
                         Only applies to constrained minimization.
   --max-iterations N    Max L-BFGS iterations, 0=unlimited (default: 0)
+  --ignore-ligands      Strip all ligands before processing. By default,
+                        ligands are auto-detected and parameterized.
+  --ligand-forcefield FF  Force field for ligands: openff-2.0.0 (default),
+                          gaff-2.11, or espaloma-0.3.0
+  --ligand-smiles RES:SMILES  Provide SMILES for a ligand residue. Can be
+                              used multiple times for multiple ligands.
 
 Input preprocessing:
   --keep-waters         Keep water molecules in input (default: removed)
+  --keep-all-ligands    Keep all HETATM records including crystallography
+                        artifacts. By default, common artifacts are removed.
+  --keep-ligand RESNAME Keep specific ligand residue (can be used multiple
+                        times). Example: --keep-ligand GOL --keep-ligand SO4
 
 Scoring:
   --scorefile FILE      Output scorefile with energy terms

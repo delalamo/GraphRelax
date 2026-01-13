@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Dict, Literal, Optional
+from typing import Dict, Literal, Optional, Set
 
 LigandForceField = Literal["openff-2.0.0", "gaff-2.11", "espaloma-0.3.0"]
 
@@ -46,10 +46,8 @@ class RelaxConfig:
     split_chains_at_gaps: bool = True  # Split chains at gaps to prevent closure
     # GPU is auto-detected and used when available
 
-    # Ligand support options
-    include_ligands: bool = (
-        False  # Enable ligand parameterization in unconstrained
-    )
+    # Ligand support options (ligands are auto-detected)
+    ignore_ligands: bool = False  # If True, strip all ligands before processing
     ligand_forcefield: LigandForceField = (
         "openff-2.0.0"  # Force field for ligands
     )
@@ -68,5 +66,7 @@ class PipelineConfig:
     scorefile: Optional[Path] = None  # If set, write scores to this file
     verbose: bool = False
     remove_waters: bool = True  # Remove water molecules from input
+    remove_artifacts: bool = True  # Remove crystallography artifacts by default
+    keep_residues: Set[str] = field(default_factory=set)  # Whitelist residues
     design: DesignConfig = field(default_factory=DesignConfig)
     relax: RelaxConfig = field(default_factory=RelaxConfig)

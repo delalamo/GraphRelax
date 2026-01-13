@@ -217,12 +217,12 @@ Examples:
         ),
     )
     relax_group.add_argument(
-        "--include-ligands",
+        "--ignore-ligands",
         action="store_true",
         help=(
-            "Include ligands in unconstrained minimization using "
-            "openmmforcefields. If not specified with ligands present, "
-            "--constrained-minimization is required."
+            "Strip all ligands (HETATM records) before processing. "
+            "By default, ligands are auto-detected and parameterized "
+            "using openmmforcefields."
         ),
     )
     relax_group.add_argument(
@@ -261,6 +261,26 @@ Examples:
         "--keep-waters",
         action="store_true",
         help="Keep water molecules in input (default: waters are removed)",
+    )
+    preprocess_group.add_argument(
+        "--keep-all-ligands",
+        action="store_true",
+        help=(
+            "Keep all HETATM records including crystallography artifacts "
+            "(buffers, cryoprotectants, detergents, lipids). "
+            "By default, common artifacts are removed."
+        ),
+    )
+    preprocess_group.add_argument(
+        "--keep-ligand",
+        type=str,
+        action="append",
+        metavar="RESNAME",
+        help=(
+            "Keep a specific ligand residue that would otherwise be stripped "
+            "as an artifact. Can be used multiple times. "
+            "Example: --keep-ligand GOL --keep-ligand SO4"
+        ),
     )
 
     # General options
@@ -336,22 +356,19 @@ def main(args=None) -> int:
     input_format = detect_format(opts.input)
     has_ligands = _check_for_ligands(opts.input, input_format)
 
-    # Validate: ligand handling requires --include-ligands or --constrained
+    # Log ligand handling info
     uses_relaxation = mode in (
         PipelineMode.RELAX,
         PipelineMode.NO_REPACK,
         PipelineMode.DESIGN,
     )
     if has_ligands and uses_relaxation:
-        if opts.include_ligands:
-            logger.info("Ligand support enabled via openmmforcefields")
-        elif not opts.constrained_minimization:
-            logger.error(
-                "Input PDB contains ligands (HETATM records). Use one of:\n"
-                "  1. --include-ligands\n"
-                "  2. --constrained-minimization"
-            )
-            return 1
+        if opts.ignore_ligands:
+            logger.info("Ligands will be stripped (--ignore-ligands)")
+        elif opts.constrained_minimization:
+            logger.info("Ligands handled via constrained minimization")
+        else:
+            logger.info("Ligands auto-detected, using openmmforcefields")
 
     logger.info(f"Running GraphRelax in {mode.value} mode")
     logger.info(f"Input: {opts.input}")
@@ -383,10 +400,15 @@ def main(args=None) -> int:
         max_iterations=opts.max_iterations,
         constrained=opts.constrained_minimization,
         split_chains_at_gaps=not opts.no_split_gaps,
-        include_ligands=opts.include_ligands,
+        ignore_ligands=opts.ignore_ligands,
         ligand_forcefield=opts.ligand_forcefield,
         ligand_smiles=ligand_smiles,
     )
+
+    # Build keep_residues set from --keep-ligand flags
+    keep_residues = set()
+    if opts.keep_ligand:
+        keep_residues = {r.upper() for r in opts.keep_ligand}
 
     pipeline_config = PipelineConfig(
         mode=mode,
@@ -395,6 +417,8 @@ def main(args=None) -> int:
         scorefile=opts.scorefile,
         verbose=opts.verbose,
         remove_waters=not opts.keep_waters,
+        remove_artifacts=not opts.keep_all_ligands,
+        keep_residues=keep_residues,
         design=design_config,
         relax=relax_config,
     )

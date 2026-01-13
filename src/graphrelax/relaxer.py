@@ -185,8 +185,8 @@ class Relaxer:
         No position restraints, no violation checking, uses OpenMM defaults.
         This is the default minimization mode.
 
-        If config.include_ligands is True and ligands are present, uses
-        openmmforcefields for ligand parameterization.
+        Ligands are auto-detected. If present and ignore_ligands is False,
+        uses openmmforcefields for ligand parameterization.
 
         Args:
             pdb_string: PDB file contents as string
@@ -201,7 +201,8 @@ class Relaxer:
             for line in pdb_string.split("\n")
         )
 
-        if has_ligands and self.config.include_ligands:
+        # Auto-detect ligands and use openmmforcefields unless ignore_ligands
+        if has_ligands and not self.config.ignore_ligands:
             return self._relax_unconstrained_with_ligands(pdb_string)
 
         ENERGY = unit.kilocalories_per_mole
