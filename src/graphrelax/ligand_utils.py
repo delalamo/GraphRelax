@@ -141,6 +141,53 @@ def get_ion_smiles() -> Dict[str, str]:
     }
 
 
+# Cofactors that contain metals or unusual chemistry that cannot be
+# parameterized by standard force fields (GAFF, OpenFF, etc.)
+# These ligands will be excluded from minimization and restored unchanged.
+UNPARAMETERIZABLE_COFACTORS = {
+    # Heme and porphyrins (contain Fe)
+    "HEM",
+    "HEC",  # Heme C
+    "HEA",  # Heme A
+    "HEB",  # Heme B
+    "1HE",  # Heme variant
+    "2HE",
+    "DHE",  # Deuteroheme
+    "HAS",  # Heme-AS
+    "HDD",  # Hydroxyheme
+    "HEO",  # Heme O
+    "HNI",  # Heme N
+    "SRM",  # Siroheme
+    # Iron-sulfur clusters
+    "SF4",  # 4Fe-4S cluster
+    "FES",  # 2Fe-2S cluster
+    "F3S",  # 3Fe-4S cluster
+    # Other metallocofactors
+    "CLA",  # Chlorophyll A
+    "CLB",  # Chlorophyll B
+    "BCL",  # Bacteriochlorophyll
+    "BPH",  # Bacteriopheophytin
+    "PHO",  # Pheophytin
+    "CHL",  # Chlorophyll
+    "B12",  # Vitamin B12 / Cobalamin
+    "COB",  # Cobalamin
+    "PQQ",  # Pyrroloquinoline quinone
+    "MTE",  # Methanopterin
+    "F43",  # Coenzyme F430 (Ni)
+    "MO7",  # Molybdopterin
+    "MGD",  # Molybdopterin guanine dinucleotide
+    # Copper centers
+    "CU1",  # Copper site
+    "CUA",  # CuA center
+    "CUB",  # CuB center
+}
+
+
+def is_unparameterizable_cofactor(resname: str) -> bool:
+    """Check if a residue is a known unparameterizable cofactor."""
+    return resname.upper() in UNPARAMETERIZABLE_COFACTORS
+
+
 def is_single_atom_ligand(ligand: LigandInfo) -> bool:
     """Check if ligand is a single atom (ion)."""
     return len(ligand.pdb_lines) == 1

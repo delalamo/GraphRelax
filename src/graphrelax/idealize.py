@@ -31,6 +31,7 @@ from graphrelax.config import IdealizeConfig
 from graphrelax.ligand_utils import (
     create_openff_molecule,
     extract_ligands_from_pdb,
+    is_unparameterizable_cofactor,
     ligand_pdb_to_topology,
 )
 from graphrelax.utils import check_gpu_available
@@ -560,8 +561,24 @@ def minimize_with_ligands(
 
     # Separate protein and ligands
     protein_pdb, ligands = extract_ligands_from_pdb(pdb_string)
+
+    # Check for unparameterizable cofactors and fail early
+    for lig in ligands:
+        if is_unparameterizable_cofactor(lig.resname):
+            raise ValueError(
+                f"Cannot parameterize cofactor '{lig.resname}' "
+                f"(chain {lig.chain_id}, res {lig.resnum}). "
+                f"Metallocofactors like heme, Fe-S clusters, and chlorophylls "
+                f"cannot be parameterized by standard force fields.\n\n"
+                f"Options:\n"
+                f"  1. Remove the cofactor from the input PDB\n"
+                f"  2. Use --ignore-ligands to exclude all ligands\n"
+                f"  3. Use --no-idealize to skip idealization"
+            )
+
     ligand_names = [lig.resname for lig in ligands]
-    logger.debug(f"Found {len(ligands)} ligand(s): {ligand_names}")
+    if ligands:
+        logger.debug(f"Found {len(ligands)} ligand(s): {ligand_names}")
 
     # Fix protein with pdbfixer (without ligands)
     fixer = PDBFixer(pdbfile=io.StringIO(protein_pdb))
@@ -651,9 +668,10 @@ def minimize_with_ligands(
     openmm_app.PDBFile.writeFile(
         simulation.topology, state.getPositions(), output, keepIds=True
     )
+    result = output.getvalue()
 
     logger.debug("Constrained minimization with ligands complete")
-    return output.getvalue()
+    return result
 
 
 def _idealize_chain_segment(

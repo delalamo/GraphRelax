@@ -23,6 +23,7 @@ from graphrelax.idealize import extract_ligands, restore_ligands
 from graphrelax.ligand_utils import (
     create_openff_molecule,
     extract_ligands_from_pdb,
+    is_unparameterizable_cofactor,
     ligand_pdb_to_topology,
 )
 from graphrelax.utils import check_gpu_available
@@ -369,6 +370,21 @@ class Relaxer:
 
         # Step 1: Separate protein and ligands
         protein_pdb, ligands = extract_ligands_from_pdb(pdb_string)
+
+        # Check for unparameterizable cofactors and fail early
+        for lig in ligands:
+            if is_unparameterizable_cofactor(lig.resname):
+                raise ValueError(
+                    f"Cannot parameterize cofactor '{lig.resname}' "
+                    f"(chain {lig.chain_id}, res {lig.resnum}). "
+                    f"Metallocofactors like heme, Fe-S clusters, and "
+                    f"chlorophylls cannot be parameterized.\n\n"
+                    f"Options:\n"
+                    f"  1. Remove the cofactor from the input PDB\n"
+                    f"  2. Use --ignore-ligands to exclude all ligands\n"
+                    f"  3. Use --constrained-minimization (protein-only)"
+                )
+
         ligand_names = [lig.resname for lig in ligands]
         logger.info(f"Found {len(ligands)} ligand(s): {ligand_names}")
 
