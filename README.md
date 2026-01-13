@@ -9,10 +9,9 @@ GraphRelax combines **LigandMPNN** (for sequence design and side-chain packing) 
 ```bash
 # Install from PyPI
 pip install graphrelax
-
-# Download LigandMPNN model weights (~40MB)
-download-ligandmpnn-weights
 ```
+
+LigandMPNN model weights (~40MB) are downloaded automatically on first run.
 
 ### Development Installation
 
@@ -23,9 +22,6 @@ cd GraphRelax
 
 # Install in editable mode
 pip install -e .
-
-# Download LigandMPNN model weights (~40MB)
-./scripts/download_weights.sh
 ```
 
 ### Optional: Constrained Minimization

@@ -11,6 +11,12 @@ from openmm import Platform
 from openmm import app as openmm_app
 from openmm import openmm, unit
 
+from graphrelax.chain_gaps import (
+    detect_chain_gaps,
+    get_gap_summary,
+    restore_chain_ids,
+    split_chains_at_gaps,
+)
 from graphrelax.config import RelaxConfig
 
 # Add vendored LigandMPNN to path for OpenFold imports
@@ -54,17 +60,42 @@ class Relaxer:
         Uses unconstrained minimization by default, or constrained
         AmberRelaxation if config.constrained is True.
 
+        If split_chains_at_gaps is enabled, chains will be split at detected
+        gaps before minimization to prevent artificial gap closure.
+
         Args:
             pdb_string: PDB file contents as string
 
         Returns:
             Tuple of (relaxed_pdb_string, debug_info, violations)
         """
+        # Detect and handle chain gaps if configured
+        chain_mapping = {}
+        if self.config.split_chains_at_gaps:
+            gaps = detect_chain_gaps(pdb_string)
+            if gaps:
+                logger.info(get_gap_summary(gaps))
+                pdb_string, chain_mapping = split_chains_at_gaps(
+                    pdb_string, gaps
+                )
+
         if self.config.constrained:
             prot = protein.from_pdb_string(pdb_string)
-            return self.relax_protein(prot)
+            relaxed_pdb, debug_info, violations = self.relax_protein(prot)
         else:
-            return self._relax_unconstrained(pdb_string)
+            relaxed_pdb, debug_info, violations = self._relax_unconstrained(
+                pdb_string
+            )
+
+        # Restore original chain IDs if chains were split
+        if chain_mapping:
+            relaxed_pdb = restore_chain_ids(relaxed_pdb, chain_mapping)
+            debug_info["chains_split"] = True
+            debug_info["gaps_detected"] = len(
+                [k for k, v in chain_mapping.items() if k != v]
+            )
+
+        return relaxed_pdb, debug_info, violations
 
     def relax_pdb_file(self, pdb_path: Path) -> Tuple[str, dict, np.ndarray]:
         """

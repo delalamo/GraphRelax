@@ -6,6 +6,8 @@ import logging
 import sys
 from pathlib import Path
 
+from graphrelax.weights import ensure_weights
+
 
 def setup_logging(verbose: bool):
     """Configure logging."""
@@ -205,6 +207,15 @@ Examples:
         metavar="N",
         help="Max L-BFGS iterations, 0=unlimited (default: 0)",
     )
+    relax_group.add_argument(
+        "--no-split-gaps",
+        action="store_true",
+        help=(
+            "Disable automatic chain splitting at gaps. "
+            "By default, chains are split at detected gaps (missing residues) "
+            "to prevent artificial gap closure during minimization."
+        ),
+    )
 
     # Scoring options
     score_group = parser.add_argument_group("Scoring options")
@@ -267,6 +278,9 @@ def main(args=None) -> int:
         )
         return 1
 
+    # Ensure model weights are downloaded
+    ensure_weights(verbose=opts.verbose)
+
     # Import here to avoid slow startup from heavy dependencies
     from graphrelax.config import (
         DesignConfig,
@@ -323,6 +337,7 @@ def main(args=None) -> int:
         stiffness=opts.stiffness,
         max_iterations=opts.max_iterations,
         constrained=opts.constrained_minimization,
+        split_chains_at_gaps=not opts.no_split_gaps,
     )
 
     pipeline_config = PipelineConfig(
