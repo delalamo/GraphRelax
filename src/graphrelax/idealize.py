@@ -793,28 +793,20 @@ def idealize_structure(
         combined_pdb = restore_ligands(minimized_pdb, ligand_lines)
 
         # Run a second minimization with ligands included
-        # This allows protein-ligand interactions to relax together
         if OPENMMFF_AVAILABLE:
             logger.info("Running final minimization with ligands included")
-            try:
-                final_pdb = minimize_with_ligands(
-                    combined_pdb,
-                    stiffness=config.post_idealize_stiffness,
-                    ligand_forcefield=ligand_forcefield,
-                    ligand_smiles=ligand_smiles,
-                )
-            except Exception as e:
-                logger.warning(
-                    f"Ligand minimization failed: {e}. "
-                    "Ligands restored without minimization."
-                )
-                final_pdb = combined_pdb
-        else:
-            logger.warning(
-                "openmmforcefields not available. "
-                "Ligands restored without minimization."
+            final_pdb = minimize_with_ligands(
+                combined_pdb,
+                stiffness=config.post_idealize_stiffness,
+                ligand_forcefield=ligand_forcefield,
+                ligand_smiles=ligand_smiles,
             )
-            final_pdb = combined_pdb
+        else:
+            raise ImportError(
+                "Ligand minimization requires openmmforcefields.\n"
+                "Install with: conda install -c conda-forge openmmforcefields\n"
+                "Or use --ignore-ligands to exclude ligands."
+            )
     else:
         final_pdb = minimized_pdb
 
