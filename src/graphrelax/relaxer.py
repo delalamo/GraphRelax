@@ -4,14 +4,14 @@ import io
 import logging
 import sys
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Tuple
 
 import numpy as np
-from openmm import Platform
 from openmm import app as openmm_app
 from openmm import openmm, unit
 from pdbfixer import PDBFixer
 
+from graphrelax.artifacts import WATER_RESIDUES
 from graphrelax.chain_gaps import (
     detect_chain_gaps,
     get_gap_summary,
@@ -21,11 +21,11 @@ from graphrelax.chain_gaps import (
 from graphrelax.config import RelaxConfig
 from graphrelax.idealize import extract_ligands, restore_ligands
 from graphrelax.ligand_utils import (
-    WATER_RESIDUES,
     create_openff_molecule,
     extract_ligands_from_pdb,
     ligand_pdb_to_topology,
 )
+from graphrelax.utils import check_gpu_available
 
 # openmmforcefields is only available via conda-forge
 # Install with: conda install -c conda-forge openmmforcefields=0.13.0
@@ -66,22 +66,6 @@ class Relaxer:
 
     def __init__(self, config: RelaxConfig):
         self.config = config
-        self._use_gpu: Optional[bool] = None
-
-    def _check_gpu_available(self) -> bool:
-        """Check if CUDA is available for OpenMM."""
-        if self._use_gpu is not None:
-            return self._use_gpu
-
-        for i in range(Platform.getNumPlatforms()):
-            if Platform.getPlatform(i).getName() == "CUDA":
-                self._use_gpu = True
-                logger.info("OpenMM CUDA platform detected, using GPU")
-                return True
-
-        self._use_gpu = False
-        logger.info("OpenMM CUDA not available, using CPU")
-        return False
 
     def relax(self, pdb_string: str) -> Tuple[str, dict, np.ndarray]:
         """
@@ -165,7 +149,7 @@ class Relaxer:
         Returns:
             Tuple of (relaxed_pdb_string, debug_info, violations)
         """
-        use_gpu = self._check_gpu_available()
+        use_gpu = check_gpu_available()
 
         relaxer = AmberRelaxation(
             max_iterations=self.config.max_iterations,
@@ -223,7 +207,7 @@ class Relaxer:
         ENERGY = unit.kilocalories_per_mole
         LENGTH = unit.angstroms
 
-        use_gpu = self._check_gpu_available()
+        use_gpu = check_gpu_available()
 
         logger.info(
             f"Running unconstrained OpenMM minimization "
@@ -329,7 +313,7 @@ class Relaxer:
         ENERGY = unit.kilocalories_per_mole
         LENGTH = unit.angstroms
 
-        use_gpu = self._check_gpu_available()
+        use_gpu = check_gpu_available()
 
         logger.info(
             f"Running unconstrained minimization with ligands "
@@ -450,110 +434,6 @@ class Relaxer:
         violations = np.zeros(0)
         return relaxed_pdb, debug_data, violations
 
-    def _relax_direct(self, pdb_string: str) -> Tuple[str, dict, np.ndarray]:
-        """
-        Direct OpenMM minimization without pdbfixer.
-
-        This is a simpler approach that works for already-complete structures
-        (like those from LigandMPNN with packed side chains).
-
-        Args:
-            pdb_string: PDB file contents as string
-
-        Returns:
-            Tuple of (relaxed_pdb_string, debug_info, violations)
-        """
-        ENERGY = unit.kilocalories_per_mole
-        LENGTH = unit.angstroms
-
-        use_gpu = self._check_gpu_available()
-
-        logger.info(
-            f"Running direct OpenMM minimization "
-            f"(max_iter={self.config.max_iterations}, "
-            f"stiffness={self.config.stiffness}, gpu={use_gpu})"
-        )
-
-        # Parse PDB
-        pdb_file = io.StringIO(pdb_string)
-        pdb = openmm_app.PDBFile(pdb_file)
-
-        # Create force field and system
-        force_field = openmm_app.ForceField(
-            "amber14-all.xml", "amber14/tip3pfb.xml"
-        )
-
-        # Use Modeller to add hydrogens (doesn't require pdbfixer)
-        modeller = openmm_app.Modeller(pdb.topology, pdb.positions)
-        modeller.addHydrogens(force_field)
-
-        # Create system with constraints on hydrogen bonds
-        system = force_field.createSystem(
-            modeller.topology, constraints=openmm_app.HBonds
-        )
-
-        # Add position restraints if stiffness > 0
-        if self.config.stiffness > 0:
-            self._add_restraints(
-                system, modeller, self.config.stiffness * ENERGY / (LENGTH**2)
-            )
-
-        # Create integrator and simulation
-        integrator = openmm.LangevinIntegrator(0, 0.01, 0.0)
-        platform = openmm.Platform.getPlatformByName(
-            "CUDA" if use_gpu else "CPU"
-        )
-        simulation = openmm_app.Simulation(
-            modeller.topology, system, integrator, platform
-        )
-        simulation.context.setPositions(modeller.positions)
-
-        # Get initial energy
-        state = simulation.context.getState(getEnergy=True, getPositions=True)
-        einit = state.getPotentialEnergy().value_in_unit(ENERGY)
-        posinit = state.getPositions(asNumpy=True).value_in_unit(LENGTH)
-
-        # Minimize
-        # OpenMM minimizeEnergy tolerance is in kJ/mol/nm (gradient threshold)
-        tolerance = (
-            self.config.tolerance * unit.kilojoules_per_mole / unit.nanometer
-        )
-        simulation.minimizeEnergy(
-            maxIterations=self.config.max_iterations, tolerance=tolerance
-        )
-
-        # Get final state
-        state = simulation.context.getState(getEnergy=True, getPositions=True)
-        efinal = state.getPotentialEnergy().value_in_unit(ENERGY)
-        pos = state.getPositions(asNumpy=True).value_in_unit(LENGTH)
-
-        # Calculate RMSD
-        rmsd = np.sqrt(np.sum((posinit - pos) ** 2) / len(posinit))
-
-        # Write output PDB
-        output = io.StringIO()
-        openmm_app.PDBFile.writeFile(
-            simulation.topology, state.getPositions(), output
-        )
-        relaxed_pdb = output.getvalue()
-
-        debug_data = {
-            "initial_energy": einit,
-            "final_energy": efinal,
-            "rmsd": rmsd,
-            "attempts": 1,
-        }
-
-        logger.info(
-            f"Relaxation complete: E_init={einit:.2f}, "
-            f"E_final={efinal:.2f}, RMSD={rmsd:.3f} A"
-        )
-
-        # No violations tracking in direct mode
-        violations = np.zeros(0)
-
-        return relaxed_pdb, debug_data, violations
-
     def _add_restraints(self, system, modeller, stiffness):
         """Add harmonic position restraints to heavy atoms."""
         force = openmm.CustomExternalForce(
@@ -603,7 +483,7 @@ class Relaxer:
             )
 
             # Create simulation
-            use_gpu = self._check_gpu_available()
+            use_gpu = check_gpu_available()
             platform = openmm.Platform.getPlatformByName(
                 "CUDA" if use_gpu else "CPU"
             )

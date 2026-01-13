@@ -193,8 +193,8 @@ graphrelax -i crystal_structure.pdb -o relaxed.pdb
 # Keep all HETATM records including artifacts
 graphrelax -i crystal_structure.pdb -o relaxed.pdb --keep-all-ligands
 
-# Keep specific artifacts that you need
-graphrelax -i crystal_structure.pdb -o relaxed.pdb --keep-ligand GOL --keep-ligand SO4
+# Keep specific artifacts that you need (comma-separated)
+graphrelax -i crystal_structure.pdb -o relaxed.pdb --keep-ligand GOL,SO4
 ```
 
 ### Working with Ligands
@@ -349,8 +349,9 @@ Input preprocessing:
   --keep-waters         Keep water molecules in input (default: removed)
   --keep-all-ligands    Keep all HETATM records including crystallography
                         artifacts. By default, common artifacts are removed.
-  --keep-ligand RESNAME Keep specific ligand residue (can be used multiple
-                        times). Example: --keep-ligand GOL --keep-ligand SO4
+  --keep-ligand RES1,RES2,...
+                        Keep specific ligand residues (comma-separated).
+                        Example: --keep-ligand GOL,SO4
   --pre-idealize        Idealize backbone geometry before processing.
                         Corrects bond lengths/angles while preserving
                         dihedral angles. By default, chain breaks are closed.

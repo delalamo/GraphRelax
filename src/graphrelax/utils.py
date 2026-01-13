@@ -5,9 +5,39 @@ import math
 from pathlib import Path
 from typing import Optional
 
+from graphrelax.artifacts import WATER_RESIDUES
 from graphrelax.structure_io import StructureFormat
 
 logger = logging.getLogger(__name__)
+
+# Cache for GPU availability check
+_gpu_available = None
+
+
+def check_gpu_available() -> bool:
+    """
+    Check if CUDA is available for OpenMM.
+
+    Results are cached after first check.
+
+    Returns:
+        True if CUDA platform is available
+    """
+    global _gpu_available
+    if _gpu_available is not None:
+        return _gpu_available
+
+    from openmm import Platform
+
+    for i in range(Platform.getNumPlatforms()):
+        if Platform.getPlatform(i).getName() == "CUDA":
+            _gpu_available = True
+            logger.info("OpenMM CUDA platform detected, using GPU")
+            return True
+
+    _gpu_available = False
+    logger.info("OpenMM CUDA not available, using CPU")
+    return False
 
 
 def remove_waters(structure_string: str, fmt: StructureFormat = None) -> str:
@@ -39,7 +69,6 @@ def _remove_waters_pdb(pdb_string: str) -> str:
     Returns:
         PDB string with water molecules removed
     """
-    water_residues = {"HOH", "WAT", "SOL", "TIP3", "TIP4", "SPC"}
     filtered_lines = []
 
     for line in pdb_string.splitlines():
@@ -48,13 +77,13 @@ def _remove_waters_pdb(pdb_string: str) -> str:
             # Residue name is in columns 17-20 (0-indexed: 17:20)
             if len(line) >= 20:
                 resname = line[17:20].strip()
-                if resname in water_residues:
+                if resname in WATER_RESIDUES:
                     continue
         # Check TER records that might reference water
         elif line.startswith("TER"):
             if len(line) >= 20:
                 resname = line[17:20].strip()
-                if resname in water_residues:
+                if resname in WATER_RESIDUES:
                     continue
 
         filtered_lines.append(line)
@@ -77,11 +106,9 @@ def _remove_waters_cif(cif_string: str) -> str:
 
     from Bio.PDB import MMCIFIO, MMCIFParser, Select
 
-    water_residues = {"HOH", "WAT", "SOL", "TIP3", "TIP4", "SPC"}
-
     class WaterRemover(Select):
         def accept_residue(self, residue):
-            return residue.get_resname().strip() not in water_residues
+            return residue.get_resname().strip() not in WATER_RESIDUES
 
     # MMCIFParser requires a file path
     with tempfile.NamedTemporaryFile(

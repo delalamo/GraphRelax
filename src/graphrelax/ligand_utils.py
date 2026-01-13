@@ -23,6 +23,9 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Import WATER_RESIDUES from artifacts to avoid duplication
+from graphrelax.artifacts import WATER_RESIDUES  # noqa: E402
+
 
 def _check_ligand_deps():
     """Raise ImportError if ligand dependencies are not available."""
@@ -34,10 +37,6 @@ def _check_ligand_deps():
             "openff-toolkit=0.14.0 rdkit=2023.09.1\n\n"
             "See the README for full installation instructions."
         )
-
-
-# Water residue names to exclude from ligand processing
-WATER_RESIDUES = {"HOH", "WAT", "SOL", "TIP3", "TIP4", "SPC"}
 
 
 @dataclass

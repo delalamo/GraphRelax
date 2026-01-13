@@ -20,6 +20,7 @@ from openmm import app as openmm_app
 from openmm import openmm, unit
 from pdbfixer import PDBFixer
 
+from graphrelax.artifacts import WATER_RESIDUES
 from graphrelax.chain_gaps import (
     ChainGap,
     detect_chain_gaps,
@@ -27,6 +28,7 @@ from graphrelax.chain_gaps import (
     split_chains_at_gaps,
 )
 from graphrelax.config import IdealizeConfig
+from graphrelax.utils import check_gpu_available
 
 # Add vendored LigandMPNN to path for OpenFold imports
 LIGANDMPNN_PATH = Path(__file__).parent / "LigandMPNN"
@@ -36,9 +38,6 @@ if str(LIGANDMPNN_PATH) not in sys.path:
 from openfold.np import residue_constants as rc  # noqa: E402
 
 logger = logging.getLogger(__name__)
-
-# Water residue names to preserve with protein
-WATER_RESIDUES = {"HOH", "WAT", "SOL", "TIP3", "TIP4", "SPC"}
 
 
 @dataclass
@@ -482,11 +481,7 @@ def minimize_with_constraints(
     )
 
     # Check for GPU
-    use_gpu = False
-    for i in range(Platform.getNumPlatforms()):
-        if Platform.getPlatform(i).getName() == "CUDA":
-            use_gpu = True
-            break
+    use_gpu = check_gpu_available()
 
     # Create simulation
     integrator = openmm.LangevinIntegrator(0, 0.01, 0.0)

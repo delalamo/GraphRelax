@@ -278,63 +278,6 @@ def restore_chain_ids(
     return "\n".join(output_lines)
 
 
-def add_ter_records_at_gaps(pdb_string: str, gaps: List[ChainGap]) -> str:
-    """
-    Add TER records at gap locations to signal chain breaks.
-
-    This is an alternative to chain splitting that works with force fields
-    that recognize TER as chain termination.
-
-    Args:
-        pdb_string: PDB file contents as string
-        gaps: List of detected gaps
-
-    Returns:
-        PDB string with TER records inserted at gap locations
-    """
-    if not gaps:
-        return pdb_string
-
-    # Build set of (chain_id, resnum, icode) where TER should be inserted
-    # TER goes after residue_before
-    ter_locations = {
-        (g.chain_id, g.residue_before, g.icode_before) for g in gaps
-    }
-
-    output_lines = []
-    prev_chain = None
-    prev_resnum = None
-    prev_icode = None
-
-    for line in pdb_string.split("\n"):
-        if line.startswith(("ATOM", "HETATM")) and len(line) > 26:
-            chain_id = line[21]
-            resnum = int(line[22:26].strip())
-            icode = line[26].strip() if len(line) > 26 else ""
-
-            # Check if we need to insert TER before this line
-            # (i.e., previous residue was at a gap location)
-            if (
-                prev_chain is not None
-                and (prev_chain, prev_resnum, prev_icode) in ter_locations
-                and (chain_id != prev_chain or resnum != prev_resnum)
-            ):
-                # Insert TER record
-                ter_line = "TER   "
-                output_lines.append(ter_line)
-                logger.debug(
-                    f"Inserted TER after {prev_chain}:{prev_resnum}{prev_icode}"
-                )
-
-            prev_chain = chain_id
-            prev_resnum = resnum
-            prev_icode = icode
-
-        output_lines.append(line)
-
-    return "\n".join(output_lines)
-
-
 def get_gap_summary(gaps: List[ChainGap]) -> str:
     """
     Generate a human-readable summary of detected gaps.
