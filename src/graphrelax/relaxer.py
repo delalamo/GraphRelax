@@ -10,6 +10,7 @@ import numpy as np
 from openmm import Platform
 from openmm import app as openmm_app
 from openmm import openmm, unit
+from pdbfixer import PDBFixer
 
 from graphrelax.chain_gaps import (
     detect_chain_gaps,
@@ -25,13 +26,27 @@ from graphrelax.ligand_utils import (
     ligand_pdb_to_topology,
 )
 
-# Check if openmmforcefields is available for ligand support
+# openmmforcefields is only available via conda-forge
+# Install with: conda install -c conda-forge openmmforcefields=0.13.0
 try:
     from openmmforcefields.generators import SystemGenerator
 
     OPENMMFF_AVAILABLE = True
 except ImportError:
     OPENMMFF_AVAILABLE = False
+    SystemGenerator = None
+
+
+def _check_openmmff():
+    """Raise ImportError if openmmforcefields is not available."""
+    if not OPENMMFF_AVAILABLE:
+        raise ImportError(
+            "Ligand support requires openmmforcefields.\n"
+            "This package is only available via conda-forge:\n\n"
+            "  conda install -c conda-forge openmmforcefields=0.13.0\n\n"
+            "See the README for full installation instructions."
+        )
+
 
 # Add vendored LigandMPNN to path for OpenFold imports
 # Must happen before importing from openfold
@@ -187,11 +202,6 @@ class Relaxer:
         )
 
         if has_ligands and self.config.include_ligands:
-            if not OPENMMFF_AVAILABLE:
-                raise ImportError(
-                    "openmmforcefields is required for ligand support. "
-                    "Install with: pip install openmmforcefields openff-toolkit"
-                )
             return self._relax_unconstrained_with_ligands(pdb_string)
 
         ENERGY = unit.kilocalories_per_mole
@@ -219,8 +229,6 @@ class Relaxer:
         protein_pdb = "\n".join(atom_lines) + "\nEND\n"
 
         # Use pdbfixer to add missing atoms and terminal groups
-        from pdbfixer import PDBFixer
-
         fixer = PDBFixer(pdbfile=io.StringIO(protein_pdb))
         fixer.findMissingResidues()
         fixer.findMissingAtoms()
@@ -303,13 +311,18 @@ class Relaxer:
         The protein is processed separately with pdbfixer, then combined
         with parameterized ligands for minimization.
 
+        Requires openmmforcefields (install via conda-forge).
+
         Args:
             pdb_string: PDB file contents as string
 
         Returns:
             Tuple of (relaxed_pdb_string, debug_info, violations)
+
+        Raises:
+            ImportError: If openmmforcefields is not installed.
         """
-        from pdbfixer import PDBFixer
+        _check_openmmff()
 
         ENERGY = unit.kilocalories_per_mole
         LENGTH = unit.angstroms

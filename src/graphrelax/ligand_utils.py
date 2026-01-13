@@ -5,7 +5,36 @@ import logging
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
+from openmm import app as openmm_app
+
+# Ligand parameterization dependencies (conda-forge only)
+# conda install -c conda-forge openff-toolkit=0.14.0 rdkit=2023.09.1
+try:
+    from openff.toolkit import Molecule
+    from rdkit import Chem
+    from rdkit.Chem import AllChem
+
+    LIGAND_DEPS_AVAILABLE = True
+except ImportError:
+    LIGAND_DEPS_AVAILABLE = False
+    Molecule = None
+    Chem = None
+    AllChem = None
+
 logger = logging.getLogger(__name__)
+
+
+def _check_ligand_deps():
+    """Raise ImportError if ligand dependencies are not available."""
+    if not LIGAND_DEPS_AVAILABLE:
+        raise ImportError(
+            "Ligand parameterization requires openff-toolkit and rdkit.\n"
+            "These packages are only available via conda-forge:\n\n"
+            "  conda install -c conda-forge "
+            "openff-toolkit=0.14.0 rdkit=2023.09.1\n\n"
+            "See the README for full installation instructions."
+        )
+
 
 # Water residue names to exclude from ligand processing
 WATER_RESIDUES = {"HOH", "WAT", "SOL", "TIP3", "TIP4", "SPC"}
@@ -110,14 +139,19 @@ def create_openff_molecule(ligand: LigandInfo, smiles: Optional[str] = None):
     3. From PDB coordinates via RDKit bond perception
     4. From direct OpenFF PDB parsing
 
+    Requires openff-toolkit and rdkit (install via conda-forge).
+
     Args:
         ligand: LigandInfo with PDB coordinates
         smiles: Optional SMILES string (overrides automatic detection)
 
     Returns:
         openff.toolkit.Molecule
+
+    Raises:
+        ImportError: If openff-toolkit or rdkit are not installed.
     """
-    from openff.toolkit import Molecule
+    _check_ligand_deps()
 
     # 1. User-provided SMILES takes precedence
     if smiles:
@@ -168,10 +202,6 @@ def create_openff_molecule(ligand: LigandInfo, smiles: Optional[str] = None):
 
 def _create_molecule_via_rdkit(pdb_block: str):
     """Create OpenFF Molecule via RDKit from PDB block."""
-    from openff.toolkit import Molecule
-    from rdkit import Chem
-    from rdkit.Chem import AllChem
-
     # Parse PDB with RDKit
     mol = Chem.MolFromPDBBlock(pdb_block, removeHs=False, sanitize=False)
 
@@ -203,8 +233,6 @@ def ligand_pdb_to_topology(ligand: LigandInfo):
     Returns:
         Tuple of (topology, positions)
     """
-    from openmm import app as openmm_app
-
     pdb_block = "\n".join(ligand.pdb_lines) + "\nEND\n"
     pdb_file = openmm_app.PDBFile(io.StringIO(pdb_block))
     return pdb_file.topology, pdb_file.positions

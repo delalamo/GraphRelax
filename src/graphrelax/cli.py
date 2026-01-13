@@ -221,8 +221,7 @@ Examples:
         action="store_true",
         help=(
             "Include ligands in unconstrained minimization using "
-            "openmmforcefields. Requires: pip install openmmforcefields "
-            "openff-toolkit. If not specified with ligands present, "
+            "openmmforcefields. If not specified with ligands present, "
             "--constrained-minimization is required."
         ),
     )
@@ -345,20 +344,11 @@ def main(args=None) -> int:
     )
     if has_ligands and uses_relaxation:
         if opts.include_ligands:
-            # Verify openmmforcefields is available
-            try:
-                import openmmforcefields  # noqa: F401
-            except ImportError:
-                logger.error(
-                    "The --include-ligands flag requires openmmforcefields. "
-                    "Install with: pip install openmmforcefields openff-toolkit"
-                )
-                return 1
             logger.info("Ligand support enabled via openmmforcefields")
         elif not opts.constrained_minimization:
             logger.error(
                 "Input PDB contains ligands (HETATM records). Use one of:\n"
-                "  1. --include-ligands (requires openmmforcefields)\n"
+                "  1. --include-ligands\n"
                 "  2. --constrained-minimization"
             )
             return 1
