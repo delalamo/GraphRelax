@@ -11,7 +11,7 @@ from graphrelax.weights import ensure_weights
 
 def setup_logging(verbose: bool):
     """Configure logging."""
-    level = logging.DEBUG if verbose else logging.INFO
+    level = logging.DEBUG if verbose else logging.WARNING
     logging.basicConfig(
         level=level,
         format="%(asctime)s [%(levelname)s] %(message)s",
@@ -352,7 +352,7 @@ Examples:
         "-v",
         "--verbose",
         action="store_true",
-        help="Verbose output",
+        help="Enable verbose output (show all log messages)",
     )
     general_group.add_argument(
         "--seed",
