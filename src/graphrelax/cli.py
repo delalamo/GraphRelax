@@ -19,6 +19,43 @@ def setup_logging(verbose: bool):
     )
 
 
+def _get_output_paths(output_path: Path, n_outputs: int) -> list:
+    """
+    Get list of all output file paths that will be written.
+
+    Args:
+        output_path: Base output path
+        n_outputs: Number of outputs to generate
+
+    Returns:
+        List of Path objects for all output files
+    """
+    if n_outputs == 1:
+        return [output_path]
+
+    paths = []
+    stem = output_path.stem
+    suffix = output_path.suffix
+    for i in range(1, n_outputs + 1):
+        paths.append(output_path.parent / f"{stem}_{i}{suffix}")
+    return paths
+
+
+def _check_output_exists(output_path: Path, n_outputs: int) -> list:
+    """
+    Check if any output files already exist.
+
+    Args:
+        output_path: Base output path
+        n_outputs: Number of outputs to generate
+
+    Returns:
+        List of existing file paths
+    """
+    paths = _get_output_paths(output_path, n_outputs)
+    return [p for p in paths if p.exists()]
+
+
 def _check_for_ligands(input_path: Path, fmt) -> bool:
     """
     Check if input structure has ligands (non-water HETATM records).
@@ -281,28 +318,29 @@ Examples:
         ),
     )
     preprocess_group.add_argument(
-        "--pre-idealize",
+        "--no-idealize",
         action="store_true",
         help=(
-            "Idealize backbone geometry before processing. "
-            "Runs constrained minimization to fix local geometry while "
-            "preserving dihedral angles. By default, chain breaks are closed."
+            "Skip backbone idealization. By default, backbone geometry is "
+            "idealized before processing (corrects bond lengths/angles while "
+            "preserving dihedral angles). Use this flag to skip idealization."
         ),
     )
     preprocess_group.add_argument(
         "--ignore-missing-residues",
         action="store_true",
         help=(
-            "Do not add missing residues from SEQRES during pre-idealization. "
-            "By default, missing N/C-terminal residues and internal loops are "
-            "added based on SEQRES records."
+            "Do not add missing residues from SEQRES. By default, missing "
+            "N/C-terminal residues and internal loops are added. Use this "
+            "to preserve original PDB residue numbering for resfile "
+            "compatibility."
         ),
     )
     preprocess_group.add_argument(
         "--retain-chainbreaks",
         action="store_true",
         help=(
-            "Do not close chain breaks during pre-idealization. "
+            "Do not close chain breaks during idealization. "
             "By default, chain breaks are closed by treating all segments "
             "as a single chain. Use this to preserve gaps."
         ),
@@ -321,6 +359,11 @@ Examples:
         type=int,
         metavar="N",
         help="Random seed for reproducibility",
+    )
+    general_group.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Overwrite output files if they exist (default: error if exists)",
     )
 
     return parser
@@ -342,6 +385,23 @@ def main(args=None) -> int:
     if opts.resfile and not opts.resfile.exists():
         logger.error(f"Resfile not found: {opts.resfile}")
         return 1
+
+    # Check if output files already exist (unless --overwrite is set)
+    if not opts.overwrite:
+        existing = _check_output_exists(opts.output, opts.n_outputs)
+        if existing:
+            if len(existing) == 1:
+                logger.error(
+                    f"Output file already exists: {existing[0]}. "
+                    "Use --overwrite to replace."
+                )
+            else:
+                files = ", ".join(str(p) for p in existing)
+                logger.error(
+                    f"Output files already exist: {files}. "
+                    "Use --overwrite to replace."
+                )
+            return 1
 
     # Validate input format
     input_suffix = opts.input.suffix.lower()
@@ -426,6 +486,7 @@ def main(args=None) -> int:
         max_iterations=opts.max_iterations,
         constrained=opts.constrained_minimization,
         split_chains_at_gaps=not opts.no_split_gaps,
+        add_missing_residues=not opts.ignore_missing_residues,
         ignore_ligands=opts.ignore_ligands,
         ligand_forcefield=opts.ligand_forcefield,
         ligand_smiles=ligand_smiles,
@@ -440,7 +501,7 @@ def main(args=None) -> int:
                 keep_residues.add(resname)
 
     idealize_config = IdealizeConfig(
-        enabled=opts.pre_idealize,
+        enabled=not opts.no_idealize,
         add_missing_residues=not opts.ignore_missing_residues,
         close_chainbreaks=not opts.retain_chainbreaks,
     )

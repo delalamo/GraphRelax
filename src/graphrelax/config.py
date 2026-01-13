@@ -44,6 +44,7 @@ class RelaxConfig:
     max_outer_iterations: int = 3  # Violation-fixing iterations
     constrained: bool = False  # Use constrained (AmberRelaxation) minimization
     split_chains_at_gaps: bool = True  # Split chains at gaps to prevent closure
+    add_missing_residues: bool = True  # Add missing residues from SEQRES
     # GPU is auto-detected and used when available
 
     # Ligand support options (ligands are auto-detected)
@@ -60,7 +61,7 @@ class RelaxConfig:
 class IdealizeConfig:
     """Configuration for structure idealization preprocessing."""
 
-    enabled: bool = False  # Idealization disabled by default
+    enabled: bool = True  # Idealization enabled by default
     fix_cis_omega: bool = True  # Correct non-trans peptide bonds (except Pro)
     post_idealize_stiffness: float = 10.0  # kcal/mol/A^2 for restraint
     add_missing_residues: bool = True  # Add missing residues from SEQRES

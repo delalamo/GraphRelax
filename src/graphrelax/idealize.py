@@ -498,7 +498,7 @@ def minimize_with_constraints(
     state = simulation.context.getState(getPositions=True)
     output = io.StringIO()
     openmm_app.PDBFile.writeFile(
-        simulation.topology, state.getPositions(), output
+        simulation.topology, state.getPositions(), output, keepIds=True
     )
 
     logger.debug("Post-idealization minimization complete")

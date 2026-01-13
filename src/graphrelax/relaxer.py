@@ -217,6 +217,11 @@ class Relaxer:
         # Use pdbfixer to add missing atoms and terminal groups
         fixer = PDBFixer(pdbfile=io.StringIO(pdb_string))
         fixer.findMissingResidues()
+        if not self.config.add_missing_residues:
+            fixer.missingResidues = {}  # Clear to preserve original numbering
+        elif fixer.missingResidues:
+            n_missing = sum(len(v) for v in fixer.missingResidues.values())
+            logger.info(f"Adding {n_missing} missing residues from SEQRES")
         fixer.findMissingAtoms()
         fixer.addMissingAtoms()
 
@@ -263,10 +268,10 @@ class Relaxer:
         # Calculate RMSD
         rmsd = np.sqrt(np.sum((posinit - pos) ** 2) / len(posinit))
 
-        # Write output PDB
+        # Write output PDB (keepIds=True preserves original residue numbering)
         output = io.StringIO()
         openmm_app.PDBFile.writeFile(
-            simulation.topology, state.getPositions(), output
+            simulation.topology, state.getPositions(), output, keepIds=True
         )
         relaxed_pdb = output.getvalue()
 
@@ -328,6 +333,11 @@ class Relaxer:
         # Step 2: Fix protein with pdbfixer (without ligands)
         fixer = PDBFixer(pdbfile=io.StringIO(protein_pdb))
         fixer.findMissingResidues()
+        if not self.config.add_missing_residues:
+            fixer.missingResidues = {}  # Clear to preserve original numbering
+        elif fixer.missingResidues:
+            n_missing = sum(len(v) for v in fixer.missingResidues.values())
+            logger.info(f"Adding {n_missing} missing residues from SEQRES")
         fixer.findMissingAtoms()
         fixer.addMissingAtoms()
 
@@ -410,10 +420,10 @@ class Relaxer:
         # Calculate RMSD
         rmsd = np.sqrt(np.sum((posinit - pos) ** 2) / len(posinit))
 
-        # Write output PDB
+        # Write output PDB (keepIds=True preserves original residue numbering)
         output = io.StringIO()
         openmm_app.PDBFile.writeFile(
-            simulation.topology, state.getPositions(), output
+            simulation.topology, state.getPositions(), output, keepIds=True
         )
         relaxed_pdb = output.getvalue()
 

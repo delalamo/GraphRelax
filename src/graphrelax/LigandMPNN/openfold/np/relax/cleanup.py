@@ -57,6 +57,9 @@ def fix_pdb(pdbfile, alterations_info):
     _remove_heterogens(fixer, alterations_info, keep_water=False)
     fixer.findMissingResidues()
     alterations_info["missing_residues"] = fixer.missingResidues
+    # Clear missing residues to preserve original residue numbering
+    # Missing residues can be added via --pre-idealize if desired
+    fixer.missingResidues = {}
     fixer.findMissingAtoms()
     alterations_info["missing_heavy_atoms"] = fixer.missingAtoms
     alterations_info["missing_terminals"] = fixer.missingTerminals

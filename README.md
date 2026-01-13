@@ -239,31 +239,36 @@ graphrelax -i protein_with_ligand.pdb -o designed.pdb \
 
 **Requires:** `mamba install -c conda-forge pdbfixer`
 
-### Pre-Idealization
+### Backbone Idealization
 
-GraphRelax can optionally idealize backbone geometry before processing. This is useful for structures with distorted bond lengths or angles (e.g., from homology modeling or low-resolution experimental data). The idealization step:
+By default, GraphRelax idealizes backbone geometry before processing. This corrects distorted bond lengths and angles commonly found in experimental structures or homology models. The idealization step:
 
 1. Corrects backbone bond lengths and angles to ideal values
 2. Preserves phi/psi/omega dihedral angles
-3. Adds missing atoms and optionally missing residues from SEQRES
+3. Adds missing atoms
 4. Runs constrained minimization to relieve local strain
 5. By default, closes chain breaks (gaps) in the structure
 
+**Note:** By default, GraphRelax adds missing residues from SEQRES records during both relaxation and idealization. This may change residue numbering if the input PDB is missing N/C-terminal residues. Use `--ignore-missing-residues` to preserve original numbering for resfile compatibility.
+
 ```bash
-# Idealize before relaxation
-graphrelax -i input.pdb -o relaxed.pdb --pre-idealize
+# Default: idealization is enabled
+graphrelax -i input.pdb -o relaxed.pdb
 
-# Idealize but don't add missing residues from SEQRES
-graphrelax -i input.pdb -o relaxed.pdb --pre-idealize --ignore-missing-residues
+# Skip idealization (use input geometry as-is)
+graphrelax -i input.pdb -o relaxed.pdb --no-idealize
 
-# Idealize but keep chain breaks as separate chains (don't close gaps)
-graphrelax -i input.pdb -o relaxed.pdb --pre-idealize --retain-chainbreaks
+# Don't add missing residues (preserve original numbering for resfiles)
+graphrelax -i input.pdb -o relaxed.pdb --ignore-missing-residues
+
+# Keep chain breaks as separate chains (don't close gaps)
+graphrelax -i input.pdb -o relaxed.pdb --retain-chainbreaks
 
 # Combine with design
-graphrelax -i input.pdb -o designed.pdb --pre-idealize --design
+graphrelax -i input.pdb -o designed.pdb --design
 ```
 
-**Note:** Pre-idealization requires pdbfixer (`mamba install -c conda-forge pdbfixer`).
+**Note:** Idealization requires pdbfixer (`mamba install -c conda-forge pdbfixer`).
 
 ### Resfile Format
 
@@ -346,15 +351,16 @@ Input preprocessing:
   --keep-ligand RES1,RES2,...
                         Keep specific ligand residues (comma-separated).
                         Example: --keep-ligand GOL,SO4
-  --pre-idealize        Idealize backbone geometry before processing.
-                        Corrects bond lengths/angles while preserving
-                        dihedral angles. By default, chain breaks are closed.
-                        Requires pdbfixer.
+  --no-idealize         Skip backbone idealization. By default, backbone
+                        geometry is idealized (bond lengths/angles corrected
+                        while preserving dihedrals). Requires pdbfixer.
   --ignore-missing-residues
                         Do not add missing residues from SEQRES during
-                        pre-idealization. By default, missing terminal and
-                        internal loop residues are added.
-  --retain-chainbreaks  Do not close chain breaks during pre-idealization.
+                        processing. By default, missing terminal and
+                        internal loop residues are added during relaxation
+                        and idealization. Use this flag to preserve
+                        original PDB residue numbering for resfile compatibility.
+  --retain-chainbreaks  Do not close chain breaks during idealization.
                         By default, chain breaks are closed by treating all
                         segments as a single chain.
 
@@ -364,6 +370,7 @@ Scoring:
 General:
   -v, --verbose         Verbose output
   --seed N              Random seed for reproducibility
+  --overwrite           Overwrite output files if they exist (default: error)
 ```
 
 ### Scorefile Output
@@ -397,7 +404,7 @@ config = PipelineConfig(
         constrained=False,  # Default: unconstrained minimization
     ),
     idealize=IdealizeConfig(
-        enabled=True,  # Enable pre-idealization
+        enabled=True,  # Idealization enabled by default
         add_missing_residues=True,  # Add missing residues from SEQRES
         close_chainbreaks=True,  # Close chain breaks (default)
     ),
