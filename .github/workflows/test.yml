@@ -41,13 +41,21 @@ jobs:
           activate-environment: test
           auto-activate-base: false
 
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          df -h
+
       - name: Install conda dependencies
         run: |
           conda install -y openmm pdbfixer
 
       - name: Install pip dependencies
         run: |
-          pip install -e .[test]
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install --no-cache-dir -e .[test]
 
       - name: Download LigandMPNN weights
         run: |
