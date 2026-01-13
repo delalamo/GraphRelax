@@ -4,7 +4,6 @@ import pytest
 
 from graphrelax.chain_gaps import (
     ChainGap,
-    add_ter_records_at_gaps,
     detect_chain_gaps,
     get_gap_summary,
     restore_chain_ids,
@@ -300,27 +299,6 @@ class TestRestoreChainIds:
         )
 
         assert orig_atoms == restored_atoms
-
-
-class TestAddTerRecordsAtGaps:
-    """Tests for add_ter_records_at_gaps function."""
-
-    def test_no_ter_without_gaps(self, continuous_peptide_pdb):
-        """Test no TER records added to continuous peptide."""
-        gaps = detect_chain_gaps(continuous_peptide_pdb, check_distance=False)
-        result = add_ter_records_at_gaps(continuous_peptide_pdb, gaps)
-        assert result == continuous_peptide_pdb
-
-    def test_adds_ter_at_gap(self, gapped_peptide_pdb):
-        """Test TER record is added at gap location."""
-        gaps = detect_chain_gaps(gapped_peptide_pdb, check_distance=False)
-        result = add_ter_records_at_gaps(gapped_peptide_pdb, gaps)
-
-        # Count TER records
-        ter_count = sum(
-            1 for line in result.split("\n") if line.startswith("TER")
-        )
-        assert ter_count >= 1
 
 
 class TestGetGapSummary:

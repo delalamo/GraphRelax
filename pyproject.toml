@@ -34,8 +34,8 @@ dependencies = [
     "openmm",
 ]
 
-# Note: pdbfixer is not on PyPI, install via conda:
-#   conda install -c conda-forge pdbfixer
+# Note: Some dependencies are only available via conda-forge:
+#   conda install -c conda-forge pdbfixer openmmforcefields openff-toolkit rdkit
 
 [project.urls]
 Homepage = "https://github.com/delalamo/GraphRelax"

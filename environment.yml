@@ -1,0 +1,48 @@
+# GraphRelax Conda Environment
+# ============================
+#
+# Creates a complete environment with all dependencies for GraphRelax,
+# including ligand support.
+#
+# Usage (mamba is 10-100x faster than conda):
+#   mamba env create -f environment.yml
+#   conda activate graphrelax
+#   pip install -e .
+#
+# Or with micromamba (standalone, no conda required):
+#   micromamba create -f environment.yml
+#   micromamba activate graphrelax
+#   pip install -e .
+#
+# For GPU support, also install CUDA-enabled PyTorch:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu118
+
+name: graphrelax
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  # Python version
+  - python>=3.9
+
+  # Conda-forge only packages (not on PyPI)
+  - pdbfixer
+  - openmmforcefields>=0.13.0
+  - openff-toolkit>=0.14.0
+  - rdkit>=2023.09.1
+
+  # Core dependencies (also available via pip)
+  - openmm
+  - numpy<2
+  - biopython
+  - prody
+
+  # pip dependencies
+  - pip
+  - pip:
+      - torch>=2.0
+      - absl-py
+      - ml-collections
+      - dm-tree
+      # Install graphrelax itself
+      - -e .

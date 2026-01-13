@@ -183,6 +183,21 @@ class Pipeline:
             if removed > 0:
                 logger.info(f"Removed {removed} water-related lines from input")
 
+        # Remove crystallography artifacts if requested
+        if self.config.remove_artifacts:
+            from graphrelax.artifacts import remove_artifacts
+
+            current_structure, removed_counts = remove_artifacts(
+                current_structure,
+                keep_residues=self.config.keep_residues,
+            )
+            if removed_counts:
+                total = sum(removed_counts.values())
+                artifacts = ", ".join(
+                    f"{k}({v})" for k, v in sorted(removed_counts.items())
+                )
+                logger.info(f"Removed {total} artifact atoms: {artifacts}")
+
         # Convert to PDB format for internal processing if needed
         current_pdb = ensure_pdb_format(current_structure, input_pdb)
 
@@ -190,7 +205,8 @@ class Pipeline:
         if self.config.idealize.enabled:
             logger.info("Running pre-idealization...")
             current_pdb, gaps = idealize_structure(
-                current_pdb, self.config.idealize
+                current_pdb,
+                self.config.idealize,
             )
             if gaps:
                 logger.info(

@@ -20,6 +20,7 @@ from openmm import app as openmm_app
 from openmm import openmm, unit
 from pdbfixer import PDBFixer
 
+from graphrelax.artifacts import WATER_RESIDUES
 from graphrelax.chain_gaps import (
     ChainGap,
     detect_chain_gaps,
@@ -27,6 +28,7 @@ from graphrelax.chain_gaps import (
     split_chains_at_gaps,
 )
 from graphrelax.config import IdealizeConfig
+from graphrelax.utils import check_gpu_available
 
 # Add vendored LigandMPNN to path for OpenFold imports
 LIGANDMPNN_PATH = Path(__file__).parent / "LigandMPNN"
@@ -36,9 +38,6 @@ if str(LIGANDMPNN_PATH) not in sys.path:
 from openfold.np import residue_constants as rc  # noqa: E402
 
 logger = logging.getLogger(__name__)
-
-# Water residue names to preserve with protein
-WATER_RESIDUES = {"HOH", "WAT", "SOL", "TIP3", "TIP4", "SPC"}
 
 
 @dataclass
@@ -482,11 +481,7 @@ def minimize_with_constraints(
     )
 
     # Check for GPU
-    use_gpu = False
-    for i in range(Platform.getNumPlatforms()):
-        if Platform.getPlatform(i).getName() == "CUDA":
-            use_gpu = True
-            break
+    use_gpu = check_gpu_available()
 
     # Create simulation
     integrator = openmm.LangevinIntegrator(0, 0.01, 0.0)
@@ -503,7 +498,7 @@ def minimize_with_constraints(
     state = simulation.context.getState(getPositions=True)
     output = io.StringIO()
     openmm_app.PDBFile.writeFile(
-        simulation.topology, state.getPositions(), output
+        simulation.topology, state.getPositions(), output, keepIds=True
     )
 
     logger.debug("Post-idealization minimization complete")
@@ -564,9 +559,15 @@ def idealize_structure(
     2. Detect chain gaps
     3. Split chains at gaps
     4. Extract dihedrals and optionally correct cis-omega
-    5. Run constrained minimization to relieve local strain
-    6. Restore original chain IDs
-    7. Restore ligands
+    5. Add missing residues and atoms (protein only)
+    6. Run constrained minimization on protein only
+    7. Restore original chain IDs
+    8. Reintroduce ligands (ligands are kept at original positions)
+    9. Renumber residues sequentially
+
+    Note: Ligands are NOT minimized during idealization. They are extracted
+    before protein minimization and restored afterward at their original
+    positions. This avoids the need for ligand force field parameterization.
 
     Args:
         pdb_string: Input PDB file contents
@@ -579,7 +580,8 @@ def idealize_structure(
 
     # Step 1: Extract ligands
     protein_pdb, ligand_lines = extract_ligands(pdb_string)
-    if ligand_lines.strip():
+    has_ligands = bool(ligand_lines.strip())
+    if has_ligands:
         logger.info("Extracted ligands for separate handling")
 
     # Step 2: Detect chain gaps (only if we want to retain them)
@@ -604,21 +606,89 @@ def idealize_structure(
             if residues:
                 _idealize_chain_segment(residues, config)
 
-    # Step 5: Run constrained minimization
-    # This is the key step - it fixes local geometry issues while
-    # keeping the overall structure close to the original
+    # Step 5-6: Add missing residues/atoms and run constrained minimization
+    # (protein only - ligands are not included yet)
     minimized_pdb = minimize_with_constraints(
         protein_pdb,
         stiffness=config.post_idealize_stiffness,
         add_missing_residues=config.add_missing_residues,
     )
 
-    # Step 6: Restore original chain IDs
+    # Step 7: Restore original chain IDs
     if chain_mapping:
         minimized_pdb = restore_chain_ids(minimized_pdb, chain_mapping)
 
-    # Step 7: Restore ligands
-    final_pdb = restore_ligands(minimized_pdb, ligand_lines)
+    # Step 8: Reintroduce ligands
+    if has_ligands:
+        # Restore ligands to the minimized protein
+        # Ligands are kept at their original positions (not minimized)
+        # This avoids the need for ligand force field parameterization
+        logger.info(
+            "Restoring ligands to minimized protein (ligands held fixed)"
+        )
+        final_pdb = restore_ligands(minimized_pdb, ligand_lines)
+    else:
+        final_pdb = minimized_pdb
+
+    # Step 9: Renumber residues sequentially per chain
+    # This fixes issues where pdbfixer assigns non-sequential numbers
+    final_pdb = renumber_residues_sequential(final_pdb)
 
     logger.info("Structure idealization complete")
     return final_pdb, gaps
+
+
+def renumber_residues_sequential(pdb_string: str) -> str:
+    """
+    Renumber residues sequentially starting from 1 for each chain.
+
+    This fixes issues where pdbfixer assigns non-sequential residue numbers
+    when adding missing residues. Sequential numbering is required for
+    proper chain gap detection and LigandMPNN processing.
+
+    HETATM records are renumbered to continue after the last ATOM residue
+    in each chain.
+
+    Args:
+        pdb_string: PDB file contents
+
+    Returns:
+        PDB string with sequential residue numbering
+    """
+    lines = pdb_string.split("\n")
+    output_lines = []
+
+    # Track residue numbering per chain
+    chain_residue_count = {}  # chain_id -> next_resnum
+    residue_map = {}  # (chain_id, old_resnum, icode) -> new_resnum
+
+    # First pass: assign new numbers to unique residues
+    for line in lines:
+        if line.startswith("ATOM") or line.startswith("HETATM"):
+            chain_id = line[21]
+            old_resnum = line[22:26].strip()
+            icode = line[26]
+            key = (chain_id, old_resnum, icode)
+
+            if key not in residue_map:
+                if chain_id not in chain_residue_count:
+                    chain_residue_count[chain_id] = 1
+                residue_map[key] = chain_residue_count[chain_id]
+                chain_residue_count[chain_id] += 1
+
+    # Second pass: apply new numbers
+    for line in lines:
+        if line.startswith("ATOM") or line.startswith("HETATM"):
+            chain_id = line[21]
+            old_resnum = line[22:26].strip()
+            icode = line[26]
+            key = (chain_id, old_resnum, icode)
+
+            new_resnum = residue_map[key]
+            # Format residue number right-justified in columns 23-26
+            new_line = line[:22] + f"{new_resnum:>4}" + " " + line[27:]
+            output_lines.append(new_line)
+        else:
+            output_lines.append(line)
+
+    return "\n".join(output_lines)

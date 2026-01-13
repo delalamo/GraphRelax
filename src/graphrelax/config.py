@@ -3,7 +3,9 @@
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Dict, Literal, Optional, Set
+
+LigandForceField = Literal["openff-2.0.0", "gaff-2.11", "espaloma-0.3.0"]
 
 
 class PipelineMode(Enum):
@@ -42,14 +44,25 @@ class RelaxConfig:
     max_outer_iterations: int = 3  # Violation-fixing iterations
     constrained: bool = False  # Use constrained (AmberRelaxation) minimization
     split_chains_at_gaps: bool = True  # Split chains at gaps to prevent closure
+    add_missing_residues: bool = True  # Add missing residues from SEQRES
     # GPU is auto-detected and used when available
+
+    # Ligand support options (ligands are auto-detected)
+    ignore_ligands: bool = False  # If True, strip all ligands before processing
+    ligand_forcefield: LigandForceField = (
+        "openff-2.0.0"  # Force field for ligands
+    )
+    ligand_smiles: Dict[str, str] = field(
+        default_factory=dict
+    )  # {resname: SMILES}
+    fetch_pdbe_smiles: bool = True  # Auto-fetch SMILES from PDBe CCD
 
 
 @dataclass
 class IdealizeConfig:
     """Configuration for structure idealization preprocessing."""
 
-    enabled: bool = False  # Idealization disabled by default
+    enabled: bool = True  # Idealization enabled by default
     fix_cis_omega: bool = True  # Correct non-trans peptide bonds (except Pro)
     post_idealize_stiffness: float = 10.0  # kcal/mol/A^2 for restraint
     add_missing_residues: bool = True  # Add missing residues from SEQRES
@@ -66,6 +79,8 @@ class PipelineConfig:
     scorefile: Optional[Path] = None  # If set, write scores to this file
     verbose: bool = False
     remove_waters: bool = True  # Remove water molecules from input
+    remove_artifacts: bool = True  # Remove crystallography artifacts by default
+    keep_residues: Set[str] = field(default_factory=set)  # Whitelist residues
     design: DesignConfig = field(default_factory=DesignConfig)
     relax: RelaxConfig = field(default_factory=RelaxConfig)
     idealize: IdealizeConfig = field(default_factory=IdealizeConfig)

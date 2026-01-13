@@ -19,6 +19,43 @@ def setup_logging(verbose: bool):
     )
 
 
+def _get_output_paths(output_path: Path, n_outputs: int) -> list:
+    """
+    Get list of all output file paths that will be written.
+
+    Args:
+        output_path: Base output path
+        n_outputs: Number of outputs to generate
+
+    Returns:
+        List of Path objects for all output files
+    """
+    if n_outputs == 1:
+        return [output_path]
+
+    paths = []
+    stem = output_path.stem
+    suffix = output_path.suffix
+    for i in range(1, n_outputs + 1):
+        paths.append(output_path.parent / f"{stem}_{i}{suffix}")
+    return paths
+
+
+def _check_output_exists(output_path: Path, n_outputs: int) -> list:
+    """
+    Check if any output files already exist.
+
+    Args:
+        output_path: Base output path
+        n_outputs: Number of outputs to generate
+
+    Returns:
+        List of existing file paths
+    """
+    paths = _get_output_paths(output_path, n_outputs)
+    return [p for p in paths if p.exists()]
+
+
 def _check_for_ligands(input_path: Path, fmt) -> bool:
     """
     Check if input structure has ligands (non-water HETATM records).
@@ -216,6 +253,44 @@ Examples:
             "to prevent artificial gap closure during minimization."
         ),
     )
+    relax_group.add_argument(
+        "--ignore-ligands",
+        action="store_true",
+        help=(
+            "Strip all ligands (HETATM records) before processing. "
+            "By default, ligands are auto-detected and parameterized "
+            "using openmmforcefields."
+        ),
+    )
+    relax_group.add_argument(
+        "--ligand-forcefield",
+        choices=["openff-2.0.0", "gaff-2.11", "espaloma-0.3.0"],
+        default="openff-2.0.0",
+        metavar="FF",
+        help=(
+            "Force field for ligand parameterization (default: openff-2.0.0)."
+            " Options: openff-2.0.0 (Sage), gaff-2.11 (GAFF2), espaloma-0.3.0"
+        ),
+    )
+    relax_group.add_argument(
+        "--ligand-smiles",
+        type=str,
+        action="append",
+        metavar="RESNAME:SMILES",
+        help=(
+            "Provide SMILES for a ligand residue. Format: RESNAME:SMILES. "
+            "Can be used multiple times. Example: --ligand-smiles LIG:SMILES"
+        ),
+    )
+    relax_group.add_argument(
+        "--no-fetch-ligand-smiles",
+        action="store_true",
+        help=(
+            "Disable automatic SMILES lookup from PDBe Chemical Component "
+            "Dictionary. By default, if RDKit cannot infer bond topology from "
+            "coordinates, SMILES are fetched from PDBe."
+        ),
+    )
 
     # Scoring options
     score_group = parser.add_argument_group("Scoring options")
@@ -234,28 +309,47 @@ Examples:
         help="Keep water molecules in input (default: waters are removed)",
     )
     preprocess_group.add_argument(
-        "--pre-idealize",
+        "--keep-all-ligands",
         action="store_true",
         help=(
-            "Idealize backbone geometry before processing. "
-            "Runs constrained minimization to fix local geometry while "
-            "preserving dihedral angles. By default, chain breaks are closed."
+            "Keep all HETATM records including crystallography artifacts "
+            "(buffers, cryoprotectants, detergents, lipids). "
+            "By default, common artifacts are removed."
+        ),
+    )
+    preprocess_group.add_argument(
+        "--keep-ligand",
+        type=str,
+        metavar="RESNAMES",
+        help=(
+            "Keep specific ligand residue(s) that would otherwise be stripped "
+            "as artifacts. Comma-separated. Example: --keep-ligand GOL,SO4"
+        ),
+    )
+    preprocess_group.add_argument(
+        "--no-idealize",
+        action="store_true",
+        help=(
+            "Skip backbone idealization. By default, backbone geometry is "
+            "idealized before processing (corrects bond lengths/angles while "
+            "preserving dihedral angles). Use this flag to skip idealization."
         ),
     )
     preprocess_group.add_argument(
         "--ignore-missing-residues",
         action="store_true",
         help=(
-            "Do not add missing residues from SEQRES during pre-idealization. "
-            "By default, missing N/C-terminal residues and internal loops are "
-            "added based on SEQRES records."
+            "Do not add missing residues from SEQRES. By default, missing "
+            "N/C-terminal residues and internal loops are added. Use this "
+            "to preserve original PDB residue numbering for resfile "
+            "compatibility."
         ),
     )
     preprocess_group.add_argument(
         "--retain-chainbreaks",
         action="store_true",
         help=(
-            "Do not close chain breaks during pre-idealization. "
+            "Do not close chain breaks during idealization. "
             "By default, chain breaks are closed by treating all segments "
             "as a single chain. Use this to preserve gaps."
         ),
@@ -274,6 +368,11 @@ Examples:
         type=int,
         metavar="N",
         help="Random seed for reproducibility",
+    )
+    general_group.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Overwrite output files if they exist (default: error if exists)",
     )
 
     return parser
@@ -295,6 +394,23 @@ def main(args=None) -> int:
     if opts.resfile and not opts.resfile.exists():
         logger.error(f"Resfile not found: {opts.resfile}")
         return 1
+
+    # Check if output files already exist (unless --overwrite is set)
+    if not opts.overwrite:
+        existing = _check_output_exists(opts.output, opts.n_outputs)
+        if existing:
+            if len(existing) == 1:
+                logger.error(
+                    f"Output file already exists: {existing[0]}. "
+                    "Use --overwrite to replace."
+                )
+            else:
+                files = ", ".join(str(p) for p in existing)
+                logger.error(
+                    f"Output files already exist: {files}. "
+                    "Use --overwrite to replace."
+                )
+            return 1
 
     # Validate input format
     input_suffix = opts.input.suffix.lower()
@@ -335,19 +451,28 @@ def main(args=None) -> int:
     input_format = detect_format(opts.input)
     has_ligands = _check_for_ligands(opts.input, input_format)
 
-    # Validate: ligand_mpnn with ligands requires constrained minimization
+    # Log ligand handling info
     uses_relaxation = mode in (
         PipelineMode.RELAX,
         PipelineMode.NO_REPACK,
         PipelineMode.DESIGN,
     )
-    if has_ligands and uses_relaxation and not opts.constrained_minimization:
-        logger.error(
-            "Input PDB contains ligands (HETATM records). "
-            "Unconstrained minimization cannot handle non-standard residues. "
-            "Please use --constrained-minimization flag."
+    if has_ligands and uses_relaxation:
+        if opts.ignore_ligands:
+            logger.info("Ligands will be stripped (--ignore-ligands)")
+        elif opts.constrained_minimization:
+            logger.info("Ligands handled via constrained minimization")
+        else:
+            logger.info("Ligands auto-detected, using openmmforcefields")
+
+    # Warn about resfile + idealization interaction
+    if opts.resfile and not opts.no_idealize:
+        logger.warning(
+            "Using resfile with idealization enabled. Residue numbers in "
+            "the resfile should match the idealized structure (sequential "
+            "numbering starting from 1). Use --no-idealize or "
+            "--ignore-missing-residues to preserve original numbering."
         )
-        return 1
 
     logger.info(f"Running GraphRelax in {mode.value} mode")
     logger.info(f"Input: {opts.input}")
@@ -361,15 +486,41 @@ def main(args=None) -> int:
         seed=opts.seed,
     )
 
+    # Parse ligand SMILES if provided
+    ligand_smiles = {}
+    if opts.ligand_smiles:
+        for entry in opts.ligand_smiles:
+            if ":" not in entry:
+                logger.error(
+                    f"Invalid --ligand-smiles format: '{entry}'. "
+                    "Expected format: RESNAME:SMILES"
+                )
+                return 1
+            resname, smiles = entry.split(":", 1)
+            ligand_smiles[resname.strip().upper()] = smiles.strip()
+
     relax_config = RelaxConfig(
         stiffness=opts.stiffness,
         max_iterations=opts.max_iterations,
         constrained=opts.constrained_minimization,
         split_chains_at_gaps=not opts.no_split_gaps,
+        add_missing_residues=not opts.ignore_missing_residues,
+        ignore_ligands=opts.ignore_ligands,
+        ligand_forcefield=opts.ligand_forcefield,
+        ligand_smiles=ligand_smiles,
+        fetch_pdbe_smiles=not opts.no_fetch_ligand_smiles,
     )
 
+    # Build keep_residues set from --keep-ligand flag (comma-separated)
+    keep_residues = set()
+    if opts.keep_ligand:
+        for resname in opts.keep_ligand.split(","):
+            resname = resname.strip().upper()
+            if resname:
+                keep_residues.add(resname)
+
     idealize_config = IdealizeConfig(
-        enabled=opts.pre_idealize,
+        enabled=not opts.no_idealize,
         add_missing_residues=not opts.ignore_missing_residues,
         close_chainbreaks=not opts.retain_chainbreaks,
     )
@@ -381,6 +532,8 @@ def main(args=None) -> int:
         scorefile=opts.scorefile,
         verbose=opts.verbose,
         remove_waters=not opts.keep_waters,
+        remove_artifacts=not opts.keep_all_ligands,
+        keep_residues=keep_residues,
         design=design_config,
         relax=relax_config,
         idealize=idealize_config,

@@ -65,8 +65,8 @@ class Relaxer:
         gaps before minimization to prevent artificial gap closure.
 
         Ligands (non-water HETATM records) are extracted before relaxation
-        and restored afterward, since standard AMBER force fields cannot
-        parameterize arbitrary ligands.
+        and restored afterward. Protein atoms near ligands are restrained
+        to prevent clashes when ligands are restored.
 
         Args:
             pdb_string: PDB file contents as string
@@ -76,10 +76,13 @@ class Relaxer:
         """
         # Extract ligands before relaxation (AMBER can't parameterize them)
         protein_pdb, ligand_lines = extract_ligands(pdb_string)
+        ligand_coords = None
         if ligand_lines.strip():
             logger.debug(
                 "Extracted ligands for separate handling during relaxation"
             )
+            # Parse ligand coordinates to restrain nearby protein atoms
+            ligand_coords = self._parse_ligand_coords(ligand_lines)
 
         # Detect and handle chain gaps if configured
         chain_mapping = {}
@@ -96,7 +99,7 @@ class Relaxer:
             relaxed_pdb, debug_info, violations = self.relax_protein(prot)
         else:
             relaxed_pdb, debug_info, violations = self._relax_unconstrained(
-                protein_pdb
+                protein_pdb, ligand_coords=ligand_coords
             )
 
         # Restore original chain IDs if chains were split
@@ -111,6 +114,20 @@ class Relaxer:
         relaxed_pdb = restore_ligands(relaxed_pdb, ligand_lines)
 
         return relaxed_pdb, debug_info, violations
+
+    def _parse_ligand_coords(self, ligand_lines: str) -> np.ndarray:
+        """Parse ligand atom coordinates from HETATM lines."""
+        coords = []
+        for line in ligand_lines.split("\n"):
+            if line.startswith("HETATM"):
+                try:
+                    x = float(line[30:38])
+                    y = float(line[38:46])
+                    z = float(line[46:54])
+                    coords.append([x, y, z])
+                except (ValueError, IndexError):
+                    continue
+        return np.array(coords) if coords else None
 
     def relax_pdb_file(self, pdb_path: Path) -> Tuple[str, dict, np.ndarray]:
         """
@@ -163,18 +180,19 @@ class Relaxer:
         return relaxed_pdb, debug_data, violations
 
     def _relax_unconstrained(
-        self, pdb_string: str
+        self, pdb_string: str, ligand_coords: np.ndarray = None
     ) -> Tuple[str, dict, np.ndarray]:
         """
         Bare-bones unconstrained OpenMM minimization.
 
-        No position restraints, no violation checking, uses OpenMM defaults.
-        This is the default minimization mode.
-
-        Note: Ligands are extracted at the relax() level before calling this.
+        No position restraints on protein, uses OpenMM defaults.
+        If ligand_coords is provided, adds fixed "dummy" particles at those
+        positions with LJ repulsion to prevent protein from clashing with
+        ligand positions.
 
         Args:
             pdb_string: PDB file contents as string (protein-only)
+            ligand_coords: Optional array of ligand atom positions (Angstroms)
 
         Returns:
             Tuple of (relaxed_pdb_string, debug_info, violations)
@@ -184,9 +202,11 @@ class Relaxer:
 
         use_gpu = self._check_gpu_available()
 
+        has_ligand = ligand_coords is not None and len(ligand_coords) > 0
         logger.info(
             f"Running unconstrained OpenMM minimization "
-            f"(max_iter={self.config.max_iterations}, gpu={use_gpu})"
+            f"(max_iter={self.config.max_iterations}, gpu={use_gpu}"
+            f"{', with ligand exclusion zone' if has_ligand else ''})"
         )
 
         # Use pdbfixer to add missing atoms and terminal groups
@@ -211,6 +231,43 @@ class Relaxer:
             modeller.topology, constraints=openmm_app.HBonds
         )
 
+        n_protein_atoms = system.getNumParticles()
+
+        # Add ligand atoms as fixed dummy particles with LJ repulsion
+        ligand_particle_indices = []
+        if has_ligand:
+            # Add a custom nonbonded force for ligand-protein repulsion
+            # Using soft-core LJ potential to prevent singularities
+            ligand_repulsion = openmm.CustomNonbondedForce(
+                "epsilon * (sigma/r)^12; "
+                "sigma=0.3; epsilon=4.0"  # 3 Angstrom radius, 4 kJ/mol
+            )
+            ligand_repulsion.setNonbondedMethod(
+                openmm.CustomNonbondedForce.CutoffNonPeriodic
+            )
+            ligand_repulsion.setCutoffDistance(1.2 * unit.nanometers)
+
+            # Add all protein atoms to the force
+            for _ in range(n_protein_atoms):
+                ligand_repulsion.addParticle([])
+
+            # Add ligand dummy particles to the system
+            for _ in ligand_coords:
+                # Add massless particle (won't move)
+                idx = system.addParticle(0.0)
+                ligand_particle_indices.append(idx)
+                ligand_repulsion.addParticle([])
+
+            # Set interaction groups: protein interacts with ligand dummies
+            protein_set = set(range(n_protein_atoms))
+            ligand_set = set(ligand_particle_indices)
+            ligand_repulsion.addInteractionGroup(protein_set, ligand_set)
+
+            system.addForce(ligand_repulsion)
+            logger.debug(
+                f"Added {len(ligand_coords)} ligand exclusion particles"
+            )
+
         # Create integrator and simulation
         integrator = openmm.LangevinIntegrator(0, 0.01, 0.0)
         platform = openmm.Platform.getPlatformByName(
@@ -219,7 +276,18 @@ class Relaxer:
         simulation = openmm_app.Simulation(
             modeller.topology, system, integrator, platform
         )
-        simulation.context.setPositions(modeller.positions)
+
+        # Set positions: protein from modeller, ligand dummies from coords
+        positions = list(modeller.positions)
+        if has_ligand:
+            for coord in ligand_coords:
+                # Convert Angstroms to nanometers
+                positions.append(
+                    openmm.Vec3(coord[0], coord[1], coord[2])
+                    * 0.1
+                    * unit.nanometers
+                )
+        simulation.context.setPositions(positions)
 
         # Get initial energy
         state = simulation.context.getState(getEnergy=True, getPositions=True)
@@ -237,13 +305,18 @@ class Relaxer:
         efinal = state.getPotentialEnergy().value_in_unit(ENERGY)
         pos = state.getPositions(asNumpy=True).value_in_unit(LENGTH)
 
-        # Calculate RMSD
-        rmsd = np.sqrt(np.sum((posinit - pos) ** 2) / len(posinit))
+        # Calculate RMSD (protein atoms only)
+        rmsd = np.sqrt(
+            np.sum((posinit[:n_protein_atoms] - pos[:n_protein_atoms]) ** 2)
+            / n_protein_atoms
+        )
 
-        # Write output PDB
+        # Write output PDB (protein only - exclude dummy ligand particles)
         output = io.StringIO()
+        # Get only protein positions
+        protein_positions = state.getPositions()[:n_protein_atoms]
         openmm_app.PDBFile.writeFile(
-            simulation.topology, state.getPositions(), output
+            modeller.topology, protein_positions, output
         )
         relaxed_pdb = output.getvalue()
 
@@ -253,6 +326,8 @@ class Relaxer:
             "rmsd": rmsd,
             "attempts": 1,
         }
+        if has_ligand:
+            debug_data["ligand_exclusion_atoms"] = len(ligand_coords)
 
         logger.info(
             f"Minimization complete: E_init={einit:.2f}, "

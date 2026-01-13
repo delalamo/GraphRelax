@@ -6,49 +6,66 @@ GraphRelax combines **LigandMPNN** (for sequence design and side-chain packing) 
 
 ## Installation
 
-GraphRelax requires pdbfixer, which is only available via conda-forge. We recommend using conda/mamba for installation.
+GraphRelax requires several packages that are only available via conda-forge. We recommend using mamba for faster installation.
 
 ### From PyPI (Latest Release)
 
 ```bash
-# First, install pdbfixer via conda (required)
-conda install -c conda-forge pdbfixer
+# First, install conda-forge dependencies (not available on PyPI)
+mamba install -c conda-forge pdbfixer openmmforcefields openff-toolkit rdkit
 
 # Then install graphrelax from PyPI
 pip install graphrelax
 ```
 
-This installs the latest stable release.
-
 ### From Source (Latest Development Version)
 
 ```bash
-# First, install pdbfixer via conda (required)
-conda install -c conda-forge pdbfixer
-
 # Clone the repository
 git clone https://github.com/delalamo/GraphRelax.git
 cd GraphRelax
 
-# Install in editable mode
+# Option A: Use environment.yml with mamba (recommended)
+mamba env create -f environment.yml
+conda activate graphrelax
+pip install -e .
+
+# Option B: Manual installation
+mamba install -c conda-forge pdbfixer openmmforcefields openff-toolkit rdkit
 pip install -e .
 ```
 
-This installs the latest development version with all recent changes.
-
 LigandMPNN model weights (~40MB) are downloaded automatically on first run.
 
-### Platform-specific Installation
+> **Note:** `mamba` is a drop-in replacement for `conda` that's 10-100x faster. Install it with `conda install -n base -c conda-forge mamba`, or use `micromamba` as a standalone tool.
+
+### Dependencies
+
+Core dependencies (installed automatically via pip):
+
+- Python >= 3.9
+- PyTorch >= 2.0
+- NumPy < 2.0 (PyTorch <2.5 is incompatible with NumPy 2.x)
+- OpenMM
+- BioPython
+- ProDy
+- dm-tree
+- absl-py
+- ml-collections
+
+Conda-forge only (must be installed via mamba/conda, not pip):
+
+| Package           | Purpose                          |
+| ----------------- | -------------------------------- |
+| pdbfixer          | Structure preparation            |
+| openmmforcefields | Small molecule force fields      |
+| openff-toolkit    | OpenFF Molecule parameterization |
+| rdkit             | Bond perception from PDB         |
+
+Install all conda-forge dependencies with:
 
 ```bash
-# CPU-only (smaller install, no GPU dependencies)
-pip install "graphrelax[cpu]"
-
-# With CUDA 11 GPU support
-pip install "graphrelax[cuda11]"
-
-# With CUDA 12 GPU support
-pip install "graphrelax[cuda12]"
+mamba install -c conda-forge pdbfixer openmmforcefields openff-toolkit rdkit
 ```
 
 ### Docker
@@ -75,23 +92,13 @@ docker build -t graphrelax .
 docker run --rm graphrelax --help
 ```
 
-### Dependencies
+## Features
 
-Core dependencies (installed automatically via pip):
-
-- Python >= 3.9
-- PyTorch >= 2.0
-- NumPy < 2.0 (PyTorch <2.5 is incompatible with NumPy 2.x)
-- OpenMM
-- BioPython
-- ProDy
-- dm-tree
-- absl-py
-- ml-collections
-
-Required (must be installed separately via conda):
-
-- pdbfixer (conda-forge only, not on PyPI)
+- **FastRelax-like protocol**: Alternate between side-chain repacking and energy minimization
+- **Sequence design**: Full redesign or residue-specific control via Rosetta-style resfiles
+- **Multiple output modes**: Relax-only, repack-only, design-only, or combinations
+- **GPU acceleration**: Automatic GPU detection for both LigandMPNN and OpenMM
+- **Scorefile output**: Rosetta-compatible scorefiles with energy terms and sequence metrics
 
 ## Usage
 
@@ -162,49 +169,111 @@ graphrelax -i input.pdb -o relaxed.pdb --constrained-minimization --stiffness 5.
 | Default (unconstrained)      | No                  | No                 | Fast   | No                |
 | `--constrained-minimization` | Yes (harmonic)      | Yes                | Slower | Yes               |
 
-**Important:** When your input PDB contains ligands or other non-standard residues (HETATM records other than water), you **must** use `--constrained-minimization`. The unconstrained mode uses AMBER force field parameters which don't include templates for non-standard molecules. Constrained mode uses OpenFold's AmberRelaxation which can handle ligands properly.
+### Crystallography Artifact Removal
+
+By default, GraphRelax **automatically removes** common crystallography and cryo-EM artifacts from input structures:
+
+- **Buffers**: SO4, PO4, CIT, ACT, MES, HEPES, Tris, etc.
+- **Cryoprotectants**: GOL (glycerol), EDO (ethylene glycol), MPD, PEG variants, DMSO
+- **Detergents**: DDM, OG, LDAO, CHAPS, SDS, etc.
+- **Lipids/Fatty acids**: PLM (palmitic), MYR (myristic), OLA (oleic), etc.
+- **Reducing agents**: BME, DTT
+- **Halide ions**: CL, BR, IOD
+
+**Biologically relevant metal ions** (ZN, MG, CA, FE, MN, CU, etc.) are **preserved**.
+
+```bash
+# Artifacts are removed by default
+graphrelax -i crystal_structure.pdb -o relaxed.pdb
+
+# Keep all HETATM records including artifacts
+graphrelax -i crystal_structure.pdb -o relaxed.pdb --keep-all-ligands
+
+# Keep specific artifacts that you need (comma-separated)
+graphrelax -i crystal_structure.pdb -o relaxed.pdb --keep-ligand GOL,SO4
+```
 
 ### Working with Ligands
 
-When designing proteins with bound ligands (e.g., heme, cofactors, small molecules), use `ligand_mpnn` model type with constrained minimization:
+Biologically relevant ligands (cofactors, substrates, inhibitors) are **auto-detected** and parameterized using openmmforcefields. No special flags are needed.
 
 ```bash
-# Design around a ligand
-graphrelax -i protein_with_ligand.pdb -o designed.pdb \
-    --design --model-type ligand_mpnn --constrained-minimization
+# Ligands are automatically included and parameterized
+graphrelax -i protein_with_ligand.pdb -o designed.pdb --design
 
-# Repack side chains around a ligand
-graphrelax -i protein_with_ligand.pdb -o repacked.pdb \
-    --relax --model-type ligand_mpnn --constrained-minimization
+# Choose a specific force field for ligands
+graphrelax -i protein_with_ligand.pdb -o designed.pdb \
+    --ligand-forcefield gaff-2.11
+
+# Provide SMILES for unknown ligands
+graphrelax -i protein_with_ligand.pdb -o designed.pdb \
+    --ligand-smiles "LIG:c1ccccc1"
+
+# Strip all ligands (protein-only processing)
+graphrelax -i protein_with_ligand.pdb -o designed.pdb --ignore-ligands
 ```
 
-**Note:** If you attempt to use unconstrained minimization with a PDB containing ligands, GraphRelax will exit with an error message directing you to use `--constrained-minimization`.
+For design around ligands, use `ligand_mpnn` model type:
 
-### Pre-Idealization
+```bash
+graphrelax -i protein_with_ligand.pdb -o designed.pdb \
+    --design --model-type ligand_mpnn
+```
 
-GraphRelax can optionally idealize backbone geometry before processing. This is useful for structures with distorted bond lengths or angles (e.g., from homology modeling or low-resolution experimental data). The idealization step:
+#### Ligand Force Field Options
+
+| Force Field     | Flag                                 | Description                |
+| --------------- | ------------------------------------ | -------------------------- |
+| OpenFF Sage 2.0 | `--ligand-forcefield openff-2.0.0`   | Modern, accurate (default) |
+| GAFF 2.11       | `--ligand-forcefield gaff-2.11`      | Well-tested, robust        |
+| Espaloma 0.3    | `--ligand-forcefield espaloma-0.3.0` | ML-based, fast             |
+
+#### Alternative: Constrained Minimization
+
+Use `--constrained-minimization` for position-restrained minimization (does not require openmmforcefields):
+
+```bash
+graphrelax -i protein_with_ligand.pdb -o designed.pdb \
+    --design --constrained-minimization
+```
+
+**Requires:** `mamba install -c conda-forge pdbfixer`
+
+### Backbone Idealization
+
+By default, GraphRelax idealizes backbone geometry before processing. This corrects distorted bond lengths and angles commonly found in experimental structures or homology models. The idealization step:
 
 1. Corrects backbone bond lengths and angles to ideal values
 2. Preserves phi/psi/omega dihedral angles
-3. Adds missing atoms and optionally missing residues from SEQRES
+3. Adds missing atoms
 4. Runs constrained minimization to relieve local strain
 5. By default, closes chain breaks (gaps) in the structure
 
+**Important:** By default, GraphRelax adds missing residues from SEQRES records during idealization and renumbers all residues sequentially starting from 1 for each chain. This ensures consistent numbering regardless of the original PDB numbering scheme.
+
+If you're using a resfile, the residue numbers must match the **idealized** structure numbering (sequential from 1), not the original PDB numbering. To preserve original numbering for resfile compatibility, use one of these options:
+
+- `--ignore-missing-residues`: Keep original numbering, don't add missing residues
+- `--no-idealize`: Skip idealization entirely (preserves original geometry and numbering)
+
 ```bash
-# Idealize before relaxation
-graphrelax -i input.pdb -o relaxed.pdb --pre-idealize
+# Default: idealization is enabled
+graphrelax -i input.pdb -o relaxed.pdb
 
-# Idealize but don't add missing residues from SEQRES
-graphrelax -i input.pdb -o relaxed.pdb --pre-idealize --ignore-missing-residues
+# Skip idealization (use input geometry as-is)
+graphrelax -i input.pdb -o relaxed.pdb --no-idealize
 
-# Idealize but keep chain breaks as separate chains (don't close gaps)
-graphrelax -i input.pdb -o relaxed.pdb --pre-idealize --retain-chainbreaks
+# Don't add missing residues (preserve original numbering for resfiles)
+graphrelax -i input.pdb -o relaxed.pdb --ignore-missing-residues
+
+# Keep chain breaks as separate chains (don't close gaps)
+graphrelax -i input.pdb -o relaxed.pdb --retain-chainbreaks
 
 # Combine with design
-graphrelax -i input.pdb -o designed.pdb --pre-idealize --design
+graphrelax -i input.pdb -o designed.pdb --design
 ```
 
-**Note:** Pre-idealization requires pdbfixer (`conda install -c conda-forge pdbfixer`).
+**Note:** Idealization requires pdbfixer (`mamba install -c conda-forge pdbfixer`).
 
 ### Resfile Format
 
@@ -270,22 +339,33 @@ Relaxation options:
   --constrained-minimization  Use constrained minimization with position
                               restraints (AlphaFold-style). Default is
                               unconstrained. Requires pdbfixer.
-                              **Required when input PDB contains ligands.**
   --stiffness K         Restraint stiffness in kcal/mol/A^2 (default: 10.0)
                         Only applies to constrained minimization.
   --max-iterations N    Max L-BFGS iterations, 0=unlimited (default: 0)
+  --ignore-ligands      Strip all ligands before processing. By default,
+                        ligands are auto-detected and parameterized.
+  --ligand-forcefield FF  Force field for ligands: openff-2.0.0 (default),
+                          gaff-2.11, or espaloma-0.3.0
+  --ligand-smiles RES:SMILES  Provide SMILES for a ligand residue. Can be
+                              used multiple times for multiple ligands.
 
 Input preprocessing:
   --keep-waters         Keep water molecules in input (default: removed)
-  --pre-idealize        Idealize backbone geometry before processing.
-                        Corrects bond lengths/angles while preserving
-                        dihedral angles. By default, chain breaks are closed.
-                        Requires pdbfixer.
+  --keep-all-ligands    Keep all HETATM records including crystallography
+                        artifacts. By default, common artifacts are removed.
+  --keep-ligand RES1,RES2,...
+                        Keep specific ligand residues (comma-separated).
+                        Example: --keep-ligand GOL,SO4
+  --no-idealize         Skip backbone idealization. By default, backbone
+                        geometry is idealized (bond lengths/angles corrected
+                        while preserving dihedrals). Requires pdbfixer.
   --ignore-missing-residues
                         Do not add missing residues from SEQRES during
-                        pre-idealization. By default, missing terminal and
-                        internal loop residues are added.
-  --retain-chainbreaks  Do not close chain breaks during pre-idealization.
+                        processing. By default, missing terminal and
+                        internal loop residues are added during relaxation
+                        and idealization. Use this flag to preserve
+                        original PDB residue numbering for resfile compatibility.
+  --retain-chainbreaks  Do not close chain breaks during idealization.
                         By default, chain breaks are closed by treating all
                         segments as a single chain.
 
@@ -295,6 +375,7 @@ Scoring:
 General:
   -v, --verbose         Verbose output
   --seed N              Random seed for reproducibility
+  --overwrite           Overwrite output files if they exist (default: error)
 ```
 
 ### Scorefile Output
@@ -328,7 +409,7 @@ config = PipelineConfig(
         constrained=False,  # Default: unconstrained minimization
     ),
     idealize=IdealizeConfig(
-        enabled=True,  # Enable pre-idealization
+        enabled=True,  # Idealization enabled by default
         add_missing_residues=True,  # Add missing residues from SEQRES
         close_chainbreaks=True,  # Close chain breaks (default)
     ),
