@@ -93,14 +93,6 @@ Required (must be installed separately via conda):
 
 - pdbfixer (conda-forge only, not on PyPI)
 
-## Features
-
-- **FastRelax-like protocol**: Alternate between side-chain repacking and energy minimization
-- **Sequence design**: Full redesign or residue-specific control via Rosetta-style resfiles
-- **Multiple output modes**: Relax-only, repack-only, design-only, or combinations
-- **GPU acceleration**: Automatic GPU detection for both LigandMPNN and OpenMM
-- **Scorefile output**: Rosetta-compatible scorefiles with energy terms and sequence metrics
-
 ## Usage
 
 ### Basic Commands
