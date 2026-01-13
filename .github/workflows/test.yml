@@ -8,15 +8,26 @@ on:
 jobs:
   unit-tests:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v3
         with:
           python-version: "3.11"
+          channels: conda-forge
+          channel-priority: strict
+          activate-environment: test
+          auto-activate-base: false
 
-      - name: Install dependencies
+      - name: Install conda dependencies
+        run: |
+          conda install -y pdbfixer
+
+      - name: Install pip dependencies
         run: |
           pip install -e .[test]
 
