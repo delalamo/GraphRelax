@@ -77,9 +77,12 @@ class Relaxer:
         If split_chains_at_gaps is enabled, chains will be split at detected
         gaps before minimization to prevent artificial gap closure.
 
-        Ligands (non-water HETATM records) are extracted before relaxation
-        and restored afterward, since standard AMBER force fields cannot
-        parameterize arbitrary ligands.
+        For unconstrained minimization with ligands present, ligands are
+        parameterized using openmmforcefields and included in the minimization.
+
+        For constrained minimization, ligands are extracted before relaxation
+        and restored afterward (unchanged) since AmberRelaxation cannot
+        handle arbitrary ligands.
 
         Args:
             pdb_string: PDB file contents as string
@@ -87,7 +90,46 @@ class Relaxer:
         Returns:
             Tuple of (relaxed_pdb_string, debug_info, violations)
         """
-        # Extract ligands before relaxation (AMBER can't parameterize them)
+        # Check if ligands are present (non-water HETATM records)
+        has_ligands = any(
+            line.startswith("HETATM")
+            and line[17:20].strip() not in WATER_RESIDUES
+            for line in pdb_string.split("\n")
+        )
+
+        # For unconstrained minimization with ligands, use the ligand-aware path
+        # which includes ligands in the minimization via openmmforcefields
+        if not self.config.constrained and has_ligands:
+            if not self.config.ignore_ligands:
+                # Detect and handle chain gaps on protein portion only
+                chain_mapping = {}
+                if self.config.split_chains_at_gaps:
+                    protein_pdb, _ = extract_ligands(pdb_string)
+                    gaps = detect_chain_gaps(protein_pdb)
+                    if gaps:
+                        logger.info(get_gap_summary(gaps))
+                        # Split the full PDB (with ligands) at gaps
+                        pdb_string, chain_mapping = split_chains_at_gaps(
+                            pdb_string, gaps
+                        )
+
+                # Run unconstrained minimization with ligands included
+                relaxed_pdb, debug_info, violations = self._relax_unconstrained(
+                    pdb_string
+                )
+
+                # Restore original chain IDs if chains were split
+                if chain_mapping:
+                    relaxed_pdb = restore_chain_ids(relaxed_pdb, chain_mapping)
+                    debug_info["chains_split"] = True
+                    debug_info["gaps_detected"] = len(
+                        [k for k, v in chain_mapping.items() if k != v]
+                    )
+
+                return relaxed_pdb, debug_info, violations
+
+        # For constrained minimization or when ignoring ligands:
+        # Extract ligands, relax protein-only, restore ligands
         protein_pdb, ligand_lines = extract_ligands(pdb_string)
         if ligand_lines.strip():
             logger.debug(
