@@ -20,29 +20,44 @@ def relaxer():
     return Relaxer(config)
 
 
+@pytest.fixture
+def unconstrained_relaxer():
+    """Create a Relaxer instance with unconstrained minimization."""
+    from graphrelax.relaxer import Relaxer
+
+    config = RelaxConfig(max_iterations=50, stiffness=10.0, constrained=False)
+    return Relaxer(config)
+
+
 @pytest.mark.integration
 class TestRelaxerGPUDetection:
     """Tests for GPU detection logic."""
 
-    def test_check_gpu_available_returns_bool(self, relaxer):
+    def test_check_gpu_available_returns_bool(self):
         """Test that GPU check returns a boolean."""
-        result = relaxer._check_gpu_available()
+        from graphrelax.utils import check_gpu_available
+
+        result = check_gpu_available()
         assert isinstance(result, bool)
 
-    def test_check_gpu_available_cached(self, relaxer):
+    def test_check_gpu_available_cached(self):
         """Test that GPU check result is cached."""
-        result1 = relaxer._check_gpu_available()
-        result2 = relaxer._check_gpu_available()
+        from graphrelax.utils import check_gpu_available
+
+        result1 = check_gpu_available()
+        result2 = check_gpu_available()
         assert result1 == result2
 
 
 @pytest.mark.integration
-class TestRelaxDirect:
-    """Tests for direct OpenMM minimization."""
+class TestRelaxUnconstrained:
+    """Tests for unconstrained OpenMM minimization."""
 
-    def test_relax_direct_runs(self, relaxer, small_peptide_pdb_string):
-        """Test that direct relaxation completes without error."""
-        relaxed_pdb, debug_info, violations = relaxer._relax_direct(
+    def test_relax_unconstrained_runs(
+        self, unconstrained_relaxer, small_peptide_pdb_string
+    ):
+        """Test that unconstrained relaxation completes without error."""
+        relaxed_pdb, debug_info, violations = unconstrained_relaxer.relax(
             small_peptide_pdb_string
         )
 
@@ -50,39 +65,44 @@ class TestRelaxDirect:
         assert isinstance(relaxed_pdb, str)
         assert len(relaxed_pdb) > 0
 
-    def test_relax_direct_returns_debug_info(
-        self, relaxer, small_peptide_pdb_string
+    def test_relax_unconstrained_returns_debug_info(
+        self, unconstrained_relaxer, small_peptide_pdb_string
     ):
         """Test that debug info contains expected keys."""
-        _, debug_info, _ = relaxer._relax_direct(small_peptide_pdb_string)
+        _, debug_info, _ = unconstrained_relaxer.relax(small_peptide_pdb_string)
 
         assert "initial_energy" in debug_info
         assert "final_energy" in debug_info
         assert "rmsd" in debug_info
-        assert "attempts" in debug_info
 
-    def test_relax_direct_energy_types(self, relaxer, small_peptide_pdb_string):
+    def test_relax_unconstrained_energy_types(
+        self, unconstrained_relaxer, small_peptide_pdb_string
+    ):
         """Test that energy values are numeric."""
-        _, debug_info, _ = relaxer._relax_direct(small_peptide_pdb_string)
+        _, debug_info, _ = unconstrained_relaxer.relax(small_peptide_pdb_string)
 
         assert isinstance(debug_info["initial_energy"], (int, float))
         assert isinstance(debug_info["final_energy"], (int, float))
         assert isinstance(debug_info["rmsd"], (int, float))
 
-    def test_relax_direct_pdb_format(self, relaxer, small_peptide_pdb_string):
+    def test_relax_unconstrained_pdb_format(
+        self, unconstrained_relaxer, small_peptide_pdb_string
+    ):
         """Test that output is valid PDB format."""
-        relaxed_pdb, _, _ = relaxer._relax_direct(small_peptide_pdb_string)
+        relaxed_pdb, _, _ = unconstrained_relaxer.relax(
+            small_peptide_pdb_string
+        )
 
         # Should contain ATOM records
         assert "ATOM" in relaxed_pdb or "HETATM" in relaxed_pdb
 
-    def test_relax_direct_violations_array(
-        self, relaxer, small_peptide_pdb_string
+    def test_relax_unconstrained_violations_array(
+        self, unconstrained_relaxer, small_peptide_pdb_string
     ):
         """Test that violations is a numpy array."""
         import numpy as np
 
-        _, _, violations = relaxer._relax_direct(small_peptide_pdb_string)
+        _, _, violations = unconstrained_relaxer.relax(small_peptide_pdb_string)
 
         assert isinstance(violations, np.ndarray)
 
@@ -135,30 +155,28 @@ class TestEnergyBreakdown:
 class TestRelaxerConfig:
     """Tests for Relaxer with different configurations."""
 
-    def test_high_stiffness(self, small_peptide_pdb_string):
-        """Test relaxation with high stiffness (more restrained)."""
+    def test_high_stiffness_constrained(self, small_peptide_pdb_string):
+        """Test constrained relaxation with high stiffness (more restrained)."""
         from graphrelax.relaxer import Relaxer
 
-        config = RelaxConfig(max_iterations=50, stiffness=100.0)
+        config = RelaxConfig(
+            max_iterations=50, stiffness=100.0, constrained=True
+        )
         relaxer = Relaxer(config)
 
-        relaxed_pdb, debug_info, _ = relaxer._relax_direct(
-            small_peptide_pdb_string
-        )
+        relaxed_pdb, debug_info, _ = relaxer.relax(small_peptide_pdb_string)
 
         # High stiffness should result in small RMSD
         assert debug_info["rmsd"] < 1.0  # Less than 1 Angstrom
 
-    def test_zero_stiffness(self, small_peptide_pdb_string):
-        """Test relaxation with no restraints."""
+    def test_unconstrained_minimization(self, small_peptide_pdb_string):
+        """Test unconstrained minimization (no restraints)."""
         from graphrelax.relaxer import Relaxer
 
-        config = RelaxConfig(max_iterations=50, stiffness=0.0)
+        config = RelaxConfig(max_iterations=50, constrained=False)
         relaxer = Relaxer(config)
 
-        relaxed_pdb, debug_info, _ = relaxer._relax_direct(
-            small_peptide_pdb_string
-        )
+        relaxed_pdb, debug_info, _ = relaxer.relax(small_peptide_pdb_string)
 
         assert relaxed_pdb is not None
 
@@ -166,11 +184,11 @@ class TestRelaxerConfig:
         """Test relaxation with limited iterations."""
         from graphrelax.relaxer import Relaxer
 
-        config = RelaxConfig(max_iterations=10, stiffness=10.0)
+        config = RelaxConfig(
+            max_iterations=10, stiffness=10.0, constrained=False
+        )
         relaxer = Relaxer(config)
 
-        relaxed_pdb, debug_info, _ = relaxer._relax_direct(
-            small_peptide_pdb_string
-        )
+        relaxed_pdb, debug_info, _ = relaxer.relax(small_peptide_pdb_string)
 
         assert relaxed_pdb is not None
