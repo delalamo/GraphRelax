@@ -11,14 +11,20 @@ GraphRelax requires pdbfixer, which is only available via conda-forge. We recomm
 ### From PyPI (Latest Release)
 
 ```bash
-# First, install pdbfixer via mamba/conda (required)
+# First, install conda-forge dependencies (not available on PyPI)
 mamba install -c conda-forge pdbfixer
 
 # Then install graphrelax from PyPI
 pip install graphrelax
 ```
 
-This installs the latest stable release.
+This installs the latest stable release with basic functionality.
+
+**For ligand support** (auto-parameterization of small molecules), also install:
+
+```bash
+mamba install -c conda-forge openmmforcefields openff-toolkit rdkit
+```
 
 ### From Source (Latest Development Version)
 
@@ -60,17 +66,20 @@ Core dependencies (installed automatically via pip):
 - absl-py
 - ml-collections
 
-Required (must be installed separately via conda):
+Conda-forge only (must be installed via mamba/conda, not pip):
 
-- pdbfixer (conda-forge only, not on PyPI)
+| Package           | Required | Purpose                          |
+| ----------------- | -------- | -------------------------------- |
+| pdbfixer          | Yes      | Structure preparation            |
+| openmmforcefields | Optional | Small molecule force fields      |
+| openff-toolkit    | Optional | OpenFF Molecule parameterization |
+| rdkit             | Optional | Bond perception from PDB         |
 
-Optional (for ligand support):
+The optional packages are needed for **ligand support** (auto-parameterization of small molecules during minimization). Install all conda-forge dependencies with:
 
-| Package           | Version      | Purpose                     |
-| ----------------- | ------------ | --------------------------- |
-| openmmforcefields | >= 0.13.0    | Small molecule force fields |
-| openff-toolkit    | >= 0.14.0    | OpenFF Molecule creation    |
-| rdkit             | >= 2023.09.1 | Bond perception from PDB    |
+```bash
+mamba install -c conda-forge pdbfixer openmmforcefields openff-toolkit rdkit
+```
 
 ### Docker
 
