@@ -55,6 +55,7 @@ class RelaxConfig:
     ligand_smiles: Dict[str, str] = field(
         default_factory=dict
     )  # {resname: SMILES}
+    fetch_pdbe_smiles: bool = True  # Auto-fetch SMILES from PDBe CCD
 
 
 @dataclass

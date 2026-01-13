@@ -282,6 +282,15 @@ Examples:
             "Can be used multiple times. Example: --ligand-smiles LIG:SMILES"
         ),
     )
+    relax_group.add_argument(
+        "--no-fetch-ligand-smiles",
+        action="store_true",
+        help=(
+            "Disable automatic SMILES lookup from PDBe Chemical Component "
+            "Dictionary. By default, if RDKit cannot infer bond topology from "
+            "coordinates, SMILES are fetched from PDBe."
+        ),
+    )
 
     # Scoring options
     score_group = parser.add_argument_group("Scoring options")
@@ -499,6 +508,7 @@ def main(args=None) -> int:
         ignore_ligands=opts.ignore_ligands,
         ligand_forcefield=opts.ligand_forcefield,
         ligand_smiles=ligand_smiles,
+        fetch_pdbe_smiles=not opts.no_fetch_ligand_smiles,
     )
 
     # Build keep_residues set from --keep-ligand flag (comma-separated)

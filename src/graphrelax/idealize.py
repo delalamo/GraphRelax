@@ -28,22 +28,7 @@ from graphrelax.chain_gaps import (
     split_chains_at_gaps,
 )
 from graphrelax.config import IdealizeConfig
-from graphrelax.ligand_utils import (
-    create_openff_molecule,
-    extract_ligands_from_pdb,
-    is_unparameterizable_cofactor,
-    ligand_pdb_to_topology,
-)
 from graphrelax.utils import check_gpu_available
-
-# openmmforcefields is only available via conda-forge
-try:
-    from openmmforcefields.generators import SystemGenerator
-
-    OPENMMFF_AVAILABLE = True
-except ImportError:
-    OPENMMFF_AVAILABLE = False
-    SystemGenerator = None
 
 # Add vendored LigandMPNN to path for OpenFold imports
 LIGANDMPNN_PATH = Path(__file__).parent / "LigandMPNN"
@@ -520,153 +505,6 @@ def minimize_with_constraints(
     return output.getvalue()
 
 
-def minimize_with_ligands(
-    pdb_string: str,
-    stiffness: float = 10.0,
-    ligand_forcefield: str = "openff-2.0.0",
-    ligand_smiles: dict = None,
-) -> str:
-    """
-    Run constrained minimization with ligand support via openmmforcefields.
-
-    This function is used as a final step in idealization when ligands are
-    present. It minimizes the protein-ligand complex with position restraints
-    on all heavy atoms.
-
-    Args:
-        pdb_string: PDB file contents (protein + ligands)
-        stiffness: Restraint force constant in kcal/mol/A^2
-        ligand_forcefield: Force field for ligands (openff-2.0.0, gaff-2.11)
-        ligand_smiles: Optional dict mapping resname -> SMILES
-
-    Returns:
-        Minimized PDB string
-
-    Raises:
-        ImportError: If openmmforcefields is not available.
-    """
-    if not OPENMMFF_AVAILABLE:
-        raise ImportError(
-            "Ligand minimization requires openmmforcefields.\n"
-            "Install with: conda install -c conda-forge openmmforcefields"
-        )
-
-    ENERGY = unit.kilocalories_per_mole
-    LENGTH = unit.angstroms
-
-    logger.debug(
-        f"Running constrained minimization with ligands "
-        f"(stiffness={stiffness}, forcefield={ligand_forcefield})"
-    )
-
-    # Separate protein and ligands
-    protein_pdb, ligands = extract_ligands_from_pdb(pdb_string)
-
-    # Check for unparameterizable cofactors and fail early
-    for lig in ligands:
-        if is_unparameterizable_cofactor(lig.resname):
-            raise ValueError(
-                f"Cannot parameterize cofactor '{lig.resname}' "
-                f"(chain {lig.chain_id}, res {lig.resnum}). "
-                f"Metallocofactors like heme, Fe-S clusters, and chlorophylls "
-                f"cannot be parameterized by standard force fields.\n\n"
-                f"Options:\n"
-                f"  1. Remove the cofactor from the input PDB\n"
-                f"  2. Use --ignore-ligands to exclude all ligands\n"
-                f"  3. Use --no-idealize to skip idealization"
-            )
-
-    ligand_names = [lig.resname for lig in ligands]
-    if ligands:
-        logger.debug(f"Found {len(ligands)} ligand(s): {ligand_names}")
-
-    # Fix protein with pdbfixer (without ligands)
-    fixer = PDBFixer(pdbfile=io.StringIO(protein_pdb))
-    fixer.findMissingResidues()
-    fixer.missingResidues = {}  # Don't add missing residues at this stage
-    fixer.findMissingAtoms()
-    fixer.addMissingAtoms()
-
-    # Create OpenFF molecules for ligands
-    user_smiles = ligand_smiles or {}
-    openff_molecules = []
-    for ligand in ligands:
-        smiles = user_smiles.get(ligand.resname)
-        mol = create_openff_molecule(ligand, smiles=smiles)
-        openff_molecules.append(mol)
-
-    # Create combined topology using Modeller
-    modeller = openmm_app.Modeller(fixer.topology, fixer.positions)
-
-    # Add ligands back to modeller
-    for ligand in ligands:
-        ligand_topology, ligand_positions = ligand_pdb_to_topology(ligand)
-        modeller.add(ligand_topology, ligand_positions)
-
-    # Create SystemGenerator with ligand support
-    system_generator = SystemGenerator(
-        forcefields=["amber/ff14SB.xml"],
-        small_molecule_forcefield=ligand_forcefield,
-        molecules=openff_molecules,
-        forcefield_kwargs={
-            "constraints": openmm_app.HBonds,
-            "removeCMMotion": True,
-        },
-    )
-
-    # Add hydrogens
-    modeller.addHydrogens(system_generator.forcefield)
-
-    # Create system
-    system = system_generator.create_system(modeller.topology)
-
-    # Add position restraints to all heavy atoms
-    restraint_force = openmm.CustomExternalForce(
-        "0.5 * k * ((x-x0)^2 + (y-y0)^2 + (z-z0)^2)"
-    )
-    stiffness_openmm = (stiffness * ENERGY / (LENGTH**2)).value_in_unit(
-        unit.kilojoules_per_mole / unit.nanometers**2
-    )
-    restraint_force.addGlobalParameter("k", stiffness_openmm)
-    for p in ["x0", "y0", "z0"]:
-        restraint_force.addPerParticleParameter(p)
-
-    for i, atom in enumerate(modeller.topology.atoms()):
-        if atom.element.name != "hydrogen":
-            pos = modeller.positions[i].value_in_unit(unit.nanometers)
-            restraint_force.addParticle(i, pos)
-
-    system.addForce(restraint_force)
-    logger.debug(
-        f"Added restraints to {restraint_force.getNumParticles()} heavy atoms"
-    )
-
-    # Check for GPU
-    use_gpu = check_gpu_available()
-
-    # Create simulation and minimize
-    integrator = openmm.LangevinIntegrator(0, 0.01, 0.0)
-    platform = Platform.getPlatformByName("CUDA" if use_gpu else "CPU")
-    simulation = openmm_app.Simulation(
-        modeller.topology, system, integrator, platform
-    )
-    simulation.context.setPositions(modeller.positions)
-
-    # Minimize
-    simulation.minimizeEnergy()
-
-    # Get minimized structure
-    state = simulation.context.getState(getPositions=True)
-    output = io.StringIO()
-    openmm_app.PDBFile.writeFile(
-        simulation.topology, state.getPositions(), output, keepIds=True
-    )
-    result = output.getvalue()
-
-    logger.debug("Constrained minimization with ligands complete")
-    return result
-
-
 def _idealize_chain_segment(
     residues: list,
     config: IdealizeConfig,
@@ -710,8 +548,6 @@ def _idealize_chain_segment(
 def idealize_structure(
     pdb_string: str,
     config: IdealizeConfig,
-    ligand_forcefield: str = "openff-2.0.0",
-    ligand_smiles: dict = None,
 ) -> Tuple[str, List[ChainGap]]:
     """
     Idealize backbone geometry while preserving dihedral angles.
@@ -726,14 +562,16 @@ def idealize_structure(
     5. Add missing residues and atoms (protein only)
     6. Run constrained minimization on protein only
     7. Restore original chain IDs
-    8. Reintroduce ligands and minimize protein+ligand complex
+    8. Reintroduce ligands (ligands are kept at original positions)
     9. Renumber residues sequentially
+
+    Note: Ligands are NOT minimized during idealization. They are extracted
+    before protein minimization and restored afterward at their original
+    positions. This avoids the need for ligand force field parameterization.
 
     Args:
         pdb_string: Input PDB file contents
         config: Idealization configuration
-        ligand_forcefield: Force field for ligand parameterization
-        ligand_smiles: Optional dict mapping resname -> SMILES
 
     Returns:
         Tuple of (idealized_pdb_string, list_of_chain_gaps)
@@ -780,26 +618,15 @@ def idealize_structure(
     if chain_mapping:
         minimized_pdb = restore_chain_ids(minimized_pdb, chain_mapping)
 
-    # Step 8: Reintroduce ligands and minimize protein+ligand complex
+    # Step 8: Reintroduce ligands
     if has_ligands:
         # Restore ligands to the minimized protein
-        combined_pdb = restore_ligands(minimized_pdb, ligand_lines)
-
-        # Run a second minimization with ligands included
-        if OPENMMFF_AVAILABLE:
-            logger.info("Running final minimization with ligands included")
-            final_pdb = minimize_with_ligands(
-                combined_pdb,
-                stiffness=config.post_idealize_stiffness,
-                ligand_forcefield=ligand_forcefield,
-                ligand_smiles=ligand_smiles,
-            )
-        else:
-            raise ImportError(
-                "Ligand minimization requires openmmforcefields.\n"
-                "Install with: conda install -c conda-forge openmmforcefields\n"
-                "Or use --ignore-ligands to exclude ligands."
-            )
+        # Ligands are kept at their original positions (not minimized)
+        # This avoids the need for ligand force field parameterization
+        logger.info(
+            "Restoring ligands to minimized protein (ligands held fixed)"
+        )
+        final_pdb = restore_ligands(minimized_pdb, ligand_lines)
     else:
         final_pdb = minimized_pdb
 

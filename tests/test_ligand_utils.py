@@ -1,9 +1,13 @@
 """Unit tests for ligand utilities."""
 
+import pytest
+
 from graphrelax.ligand_utils import (
+    _PDBE_SMILES_CACHE,
     WATER_RESIDUES,
     LigandInfo,
     extract_ligands_from_pdb,
+    fetch_pdbe_smiles,
     get_ion_smiles,
     is_single_atom_ligand,
 )
@@ -181,3 +185,44 @@ class TestWaterResidues:
         assert "TIP3" in WATER_RESIDUES
         assert "TIP4" in WATER_RESIDUES
         assert "SPC" in WATER_RESIDUES
+
+
+class TestFetchPdbeSmiles:
+    """Tests for PDBe SMILES fetching."""
+
+    def setup_method(self):
+        """Clear cache before each test."""
+        _PDBE_SMILES_CACHE.clear()
+
+    @pytest.mark.network
+    def test_fetch_known_ligand(self):
+        """Test fetching SMILES for a known PDB ligand."""
+        # ATP is a well-known ligand
+        smiles = fetch_pdbe_smiles("ATP")
+        assert smiles is not None
+        assert len(smiles) > 0
+        # Cache should be populated
+        assert "ATP" in _PDBE_SMILES_CACHE
+
+    @pytest.mark.network
+    def test_fetch_unknown_ligand(self):
+        """Test fetching SMILES for a non-existent ligand."""
+        smiles = fetch_pdbe_smiles("ZZZZZ")
+        assert smiles is None
+        # Failure should also be cached
+        assert "ZZZZZ" in _PDBE_SMILES_CACHE
+        assert _PDBE_SMILES_CACHE["ZZZZZ"] is None
+
+    def test_cache_hit(self):
+        """Test that cached SMILES are returned."""
+        # Pre-populate cache
+        _PDBE_SMILES_CACHE["CACHED"] = "CCC"
+        smiles = fetch_pdbe_smiles("CACHED")
+        assert smiles == "CCC"
+
+    def test_case_insensitive(self):
+        """Test that lookup is case-insensitive."""
+        _PDBE_SMILES_CACHE["TEST"] = "C=O"
+        # Lowercase should find uppercase cache entry
+        smiles = fetch_pdbe_smiles("test")
+        assert smiles == "C=O"

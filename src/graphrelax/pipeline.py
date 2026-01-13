@@ -207,8 +207,6 @@ class Pipeline:
             current_pdb, gaps = idealize_structure(
                 current_pdb,
                 self.config.idealize,
-                ligand_forcefield=self.config.relax.ligand_forcefield,
-                ligand_smiles=self.config.relax.ligand_smiles,
             )
             if gaps:
                 logger.info(
