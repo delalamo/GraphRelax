@@ -439,13 +439,9 @@ def minimize_with_constraints(
         # Clear missing residues if user doesn't want them
         fixer.missingResidues = {}
 
-    # Find and add missing atoms within existing residues
+    # Find and add missing atoms (including for missing residues if kept)
     fixer.findMissingAtoms()
     fixer.addMissingAtoms()
-
-    # Add missing residues if requested (must be after addMissingAtoms)
-    if add_missing_residues and fixer.missingResidues:
-        fixer.addMissingResidues()
 
     # Add hydrogens
     fixer.addMissingHydrogens(7.0)
