@@ -6,32 +6,21 @@ GraphRelax combines **LigandMPNN** (for sequence design and side-chain packing) 
 
 ## Installation
 
-GraphRelax requires pdbfixer, which is only available via conda-forge. We recommend using mamba for faster installation.
+GraphRelax requires several packages that are only available via conda-forge. We recommend using mamba for faster installation.
 
 ### From PyPI (Latest Release)
 
 ```bash
 # First, install conda-forge dependencies (not available on PyPI)
-mamba install -c conda-forge pdbfixer
+mamba install -c conda-forge pdbfixer openmmforcefields openff-toolkit rdkit
 
 # Then install graphrelax from PyPI
 pip install graphrelax
 ```
 
-This installs the latest stable release with basic functionality.
-
-**For ligand support** (auto-parameterization of small molecules), also install:
-
-```bash
-mamba install -c conda-forge openmmforcefields openff-toolkit rdkit
-```
-
 ### From Source (Latest Development Version)
 
 ```bash
-# First, install pdbfixer via mamba/conda (required)
-mamba install -c conda-forge pdbfixer
-
 # Clone the repository
 git clone https://github.com/delalamo/GraphRelax.git
 cd GraphRelax
@@ -45,8 +34,6 @@ pip install -e .
 mamba install -c conda-forge pdbfixer openmmforcefields openff-toolkit rdkit
 pip install -e .
 ```
-
-This installs the latest development version with all recent changes.
 
 LigandMPNN model weights (~40MB) are downloaded automatically on first run.
 
@@ -68,14 +55,14 @@ Core dependencies (installed automatically via pip):
 
 Conda-forge only (must be installed via mamba/conda, not pip):
 
-| Package           | Required | Purpose                          |
-| ----------------- | -------- | -------------------------------- |
-| pdbfixer          | Yes      | Structure preparation            |
-| openmmforcefields | Optional | Small molecule force fields      |
-| openff-toolkit    | Optional | OpenFF Molecule parameterization |
-| rdkit             | Optional | Bond perception from PDB         |
+| Package           | Purpose                          |
+| ----------------- | -------------------------------- |
+| pdbfixer          | Structure preparation            |
+| openmmforcefields | Small molecule force fields      |
+| openff-toolkit    | OpenFF Molecule parameterization |
+| rdkit             | Bond perception from PDB         |
 
-The optional packages are needed for **ligand support** (auto-parameterization of small molecules during minimization). Install all conda-forge dependencies with:
+Install all conda-forge dependencies with:
 
 ```bash
 mamba install -c conda-forge pdbfixer openmmforcefields openff-toolkit rdkit
@@ -225,8 +212,6 @@ graphrelax -i protein_with_ligand.pdb -o designed.pdb \
 # Strip all ligands (protein-only processing)
 graphrelax -i protein_with_ligand.pdb -o designed.pdb --ignore-ligands
 ```
-
-**Requires:** `mamba install -c conda-forge openmmforcefields openff-toolkit rdkit`
 
 For design around ligands, use `ligand_mpnn` model type:
 
