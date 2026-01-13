@@ -63,8 +63,42 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Verify image
+      - name: Verify image - help command
         run: |
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           TAG="${{ github.event.inputs.tag || 'dev' }}"
           docker run --rm ${{ env.REGISTRY }}/${REPO_LOWER}:${TAG} --help
+
+      - name: Verify image - test imports and dependencies
+        run: |
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          TAG="${{ github.event.inputs.tag || 'dev' }}"
+          docker run --rm --entrypoint python ${{ env.REGISTRY }}/${REPO_LOWER}:${TAG} -c "
+          import sys
+          print('Testing critical imports...')
+
+          # Test pdbfixer (conda-only dependency)
+          from pdbfixer import PDBFixer
+          print('  pdbfixer: OK')
+
+          # Test openmm
+          import openmm
+          print('  openmm: OK')
+
+          # Test graphrelax modules
+          from graphrelax import Pipeline, PipelineConfig, PipelineMode
+          from graphrelax.idealize import idealize_structure, minimize_with_constraints
+          from graphrelax.relaxer import Relaxer
+          from graphrelax.designer import Designer
+          print('  graphrelax: OK')
+
+          # Test LigandMPNN weights exist
+          from pathlib import Path
+          weights_dir = Path('/app/src/graphrelax/LigandMPNN/model_params')
+          assert weights_dir.exists(), f'Weights directory not found: {weights_dir}'
+          weight_files = list(weights_dir.glob('*.pt'))
+          assert len(weight_files) > 0, 'No weight files found'
+          print(f'  LigandMPNN weights: OK ({len(weight_files)} files)')
+
+          print('All dependency checks passed!')
+          "
