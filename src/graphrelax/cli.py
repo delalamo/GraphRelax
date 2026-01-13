@@ -216,6 +216,36 @@ Examples:
             "to prevent artificial gap closure during minimization."
         ),
     )
+    relax_group.add_argument(
+        "--include-ligands",
+        action="store_true",
+        help=(
+            "Include ligands in unconstrained minimization using "
+            "openmmforcefields. Requires: pip install openmmforcefields "
+            "openff-toolkit. If not specified with ligands present, "
+            "--constrained-minimization is required."
+        ),
+    )
+    relax_group.add_argument(
+        "--ligand-forcefield",
+        choices=["openff-2.0.0", "gaff-2.11", "espaloma-0.3.0"],
+        default="openff-2.0.0",
+        metavar="FF",
+        help=(
+            "Force field for ligand parameterization (default: openff-2.0.0)."
+            " Options: openff-2.0.0 (Sage), gaff-2.11 (GAFF2), espaloma-0.3.0"
+        ),
+    )
+    relax_group.add_argument(
+        "--ligand-smiles",
+        type=str,
+        action="append",
+        metavar="RESNAME:SMILES",
+        help=(
+            "Provide SMILES for a ligand residue. Format: RESNAME:SMILES. "
+            "Can be used multiple times. Example: --ligand-smiles LIG:SMILES"
+        ),
+    )
 
     # Scoring options
     score_group = parser.add_argument_group("Scoring options")
@@ -307,19 +337,31 @@ def main(args=None) -> int:
     input_format = detect_format(opts.input)
     has_ligands = _check_for_ligands(opts.input, input_format)
 
-    # Validate: ligand_mpnn with ligands requires constrained minimization
+    # Validate: ligand handling requires --include-ligands or --constrained
     uses_relaxation = mode in (
         PipelineMode.RELAX,
         PipelineMode.NO_REPACK,
         PipelineMode.DESIGN,
     )
-    if has_ligands and uses_relaxation and not opts.constrained_minimization:
-        logger.error(
-            "Input PDB contains ligands (HETATM records). "
-            "Unconstrained minimization cannot handle non-standard residues. "
-            "Please use --constrained-minimization flag."
-        )
-        return 1
+    if has_ligands and uses_relaxation:
+        if opts.include_ligands:
+            # Verify openmmforcefields is available
+            try:
+                import openmmforcefields  # noqa: F401
+            except ImportError:
+                logger.error(
+                    "The --include-ligands flag requires openmmforcefields. "
+                    "Install with: pip install openmmforcefields openff-toolkit"
+                )
+                return 1
+            logger.info("Ligand support enabled via openmmforcefields")
+        elif not opts.constrained_minimization:
+            logger.error(
+                "Input PDB contains ligands (HETATM records). Use one of:\n"
+                "  1. --include-ligands (requires openmmforcefields)\n"
+                "  2. --constrained-minimization"
+            )
+            return 1
 
     logger.info(f"Running GraphRelax in {mode.value} mode")
     logger.info(f"Input: {opts.input}")
@@ -333,11 +375,27 @@ def main(args=None) -> int:
         seed=opts.seed,
     )
 
+    # Parse ligand SMILES if provided
+    ligand_smiles = {}
+    if opts.ligand_smiles:
+        for entry in opts.ligand_smiles:
+            if ":" not in entry:
+                logger.error(
+                    f"Invalid --ligand-smiles format: '{entry}'. "
+                    "Expected format: RESNAME:SMILES"
+                )
+                return 1
+            resname, smiles = entry.split(":", 1)
+            ligand_smiles[resname.strip().upper()] = smiles.strip()
+
     relax_config = RelaxConfig(
         stiffness=opts.stiffness,
         max_iterations=opts.max_iterations,
         constrained=opts.constrained_minimization,
         split_chains_at_gaps=not opts.no_split_gaps,
+        include_ligands=opts.include_ligands,
+        ligand_forcefield=opts.ligand_forcefield,
+        ligand_smiles=ligand_smiles,
     )
 
     pipeline_config = PipelineConfig(

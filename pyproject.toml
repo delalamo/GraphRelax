@@ -36,6 +36,10 @@ dependencies = [
 
 # Note: pdbfixer is not on PyPI, install via conda:
 #   conda install -c conda-forge pdbfixer
+# For ligand support in unconstrained minimization:
+#   pip install graphrelax[ligands]
+# or:
+#   conda install -c conda-forge openmmforcefields openff-toolkit rdkit
 
 [project.urls]
 Homepage = "https://github.com/delalamo/GraphRelax"
@@ -62,6 +66,12 @@ dev = [
 test = [
     "pytest>=7.0",
     "pytest-cov>=4.1",
+]
+ligands = [
+    # For ligand parameterization in unconstrained minimization
+    "openmmforcefields>=0.13.0",
+    "openff-toolkit>=0.14.0",
+    "rdkit>=2023.09.1",
 ]
 
 [project.scripts]

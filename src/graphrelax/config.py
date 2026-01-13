@@ -3,7 +3,9 @@
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Dict, Literal, Optional
+
+LigandForceField = Literal["openff-2.0.0", "gaff-2.11", "espaloma-0.3.0"]
 
 
 class PipelineMode(Enum):
@@ -43,6 +45,17 @@ class RelaxConfig:
     constrained: bool = False  # Use constrained (AmberRelaxation) minimization
     split_chains_at_gaps: bool = True  # Split chains at gaps to prevent closure
     # GPU is auto-detected and used when available
+
+    # Ligand support options
+    include_ligands: bool = (
+        False  # Enable ligand parameterization in unconstrained
+    )
+    ligand_forcefield: LigandForceField = (
+        "openff-2.0.0"  # Force field for ligands
+    )
+    ligand_smiles: Dict[str, str] = field(
+        default_factory=dict
+    )  # {resname: SMILES}
 
 
 @dataclass

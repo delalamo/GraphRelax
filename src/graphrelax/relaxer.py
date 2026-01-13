@@ -18,6 +18,21 @@ from graphrelax.chain_gaps import (
     split_chains_at_gaps,
 )
 from graphrelax.config import RelaxConfig
+from graphrelax.ligand_utils import (
+    WATER_RESIDUES,
+    create_openff_molecule,
+    extract_ligands_from_pdb,
+    get_common_ligand_smiles,
+    ligand_pdb_to_topology,
+)
+
+# Check if openmmforcefields is available for ligand support
+try:
+    from openmmforcefields.generators import SystemGenerator
+
+    OPENMMFF_AVAILABLE = True
+except ImportError:
+    OPENMMFF_AVAILABLE = False
 
 # Add vendored LigandMPNN to path for OpenFold imports
 # Must happen before importing from openfold
@@ -156,12 +171,30 @@ class Relaxer:
         No position restraints, no violation checking, uses OpenMM defaults.
         This is the default minimization mode.
 
+        If config.include_ligands is True and ligands are present, uses
+        openmmforcefields for ligand parameterization.
+
         Args:
             pdb_string: PDB file contents as string
 
         Returns:
             Tuple of (relaxed_pdb_string, debug_info, violations)
         """
+        # Check if ligands are present (non-water HETATM records)
+        has_ligands = any(
+            line.startswith("HETATM")
+            and line[17:20].strip() not in WATER_RESIDUES
+            for line in pdb_string.split("\n")
+        )
+
+        if has_ligands and self.config.include_ligands:
+            if not OPENMMFF_AVAILABLE:
+                raise ImportError(
+                    "openmmforcefields is required for ligand support. "
+                    "Install with: pip install openmmforcefields openff-toolkit"
+                )
+            return self._relax_unconstrained_with_ligands(pdb_string)
+
         ENERGY = unit.kilocalories_per_mole
         LENGTH = unit.angstroms
 
@@ -259,6 +292,149 @@ class Relaxer:
         # No violations tracking in unconstrained mode
         violations = np.zeros(0)
 
+        return relaxed_pdb, debug_data, violations
+
+    def _relax_unconstrained_with_ligands(
+        self, pdb_string: str
+    ) -> Tuple[str, dict, np.ndarray]:
+        """
+        Unconstrained OpenMM minimization with ligand support.
+
+        Uses openmmforcefields to parameterize ligands with GAFF2/OpenFF.
+        The protein is processed separately with pdbfixer, then combined
+        with parameterized ligands for minimization.
+
+        Args:
+            pdb_string: PDB file contents as string
+
+        Returns:
+            Tuple of (relaxed_pdb_string, debug_info, violations)
+        """
+        from pdbfixer import PDBFixer
+
+        ENERGY = unit.kilocalories_per_mole
+        LENGTH = unit.angstroms
+
+        use_gpu = self._check_gpu_available()
+
+        logger.info(
+            f"Running unconstrained minimization with ligands "
+            f"(forcefield={self.config.ligand_forcefield}, gpu={use_gpu})"
+        )
+
+        # Step 1: Separate protein and ligands
+        protein_pdb, ligands = extract_ligands_from_pdb(pdb_string)
+        logger.info(
+            f"Found {len(ligands)} ligand(s): {[l.resname for l in ligands]}"
+        )
+
+        # Step 2: Fix protein with pdbfixer (without ligands)
+        fixer = PDBFixer(pdbfile=io.StringIO(protein_pdb))
+        fixer.findMissingResidues()
+        fixer.findMissingAtoms()
+        fixer.addMissingAtoms()
+
+        # Step 3: Create OpenFF molecules for ligands
+        known_smiles = get_common_ligand_smiles()
+        known_smiles.update(self.config.ligand_smiles or {})
+
+        openff_molecules = []
+        for ligand in ligands:
+            smiles = known_smiles.get(ligand.resname)
+            try:
+                mol = create_openff_molecule(ligand, smiles=smiles)
+                openff_molecules.append(mol)
+                logger.debug(f"Created OpenFF molecule for {ligand.resname}")
+            except Exception as e:
+                resname = ligand.resname
+                raise ValueError(
+                    f"Could not parameterize ligand '{resname}' "
+                    f"(chain {ligand.chain_id}, res {ligand.resnum}): {e}\n\n"
+                    f"Options to resolve:\n"
+                    f"  1. Provide SMILES via config: "
+                    f"ligand_smiles={{'{resname}': 'SMILES_STRING'}}\n"
+                    f"  2. Use constrained minimization: constrained=True\n"
+                    f"  3. Remove the ligand from the input PDB\n\n"
+                    f"For common ligands, see: "
+                    f"https://www.ebi.ac.uk/pdbe-srv/pdbechem/"
+                )
+
+        # Step 4: Create combined topology using Modeller
+        modeller = openmm_app.Modeller(fixer.topology, fixer.positions)
+
+        # Add ligands back to modeller
+        for ligand in ligands:
+            ligand_topology, ligand_positions = ligand_pdb_to_topology(ligand)
+            modeller.add(ligand_topology, ligand_positions)
+
+        # Step 5: Create SystemGenerator with ligand support
+        system_generator = SystemGenerator(
+            forcefields=["amber/ff14SB.xml"],
+            small_molecule_forcefield=self.config.ligand_forcefield,
+            molecules=openff_molecules,
+            forcefield_kwargs={
+                "constraints": openmm_app.HBonds,
+                "removeCMMotion": True,
+            },
+        )
+
+        # Add hydrogens
+        modeller.addHydrogens(system_generator.forcefield)
+
+        # Create system
+        system = system_generator.create_system(modeller.topology)
+
+        # Step 6: Run minimization
+        integrator = openmm.LangevinIntegrator(0, 0.01, 0.0)
+        platform = openmm.Platform.getPlatformByName(
+            "CUDA" if use_gpu else "CPU"
+        )
+        simulation = openmm_app.Simulation(
+            modeller.topology, system, integrator, platform
+        )
+        simulation.context.setPositions(modeller.positions)
+
+        # Get initial energy
+        state = simulation.context.getState(getEnergy=True, getPositions=True)
+        einit = state.getPotentialEnergy().value_in_unit(ENERGY)
+        posinit = state.getPositions(asNumpy=True).value_in_unit(LENGTH)
+
+        # Minimize
+        if self.config.max_iterations > 0:
+            simulation.minimizeEnergy(maxIterations=self.config.max_iterations)
+        else:
+            simulation.minimizeEnergy()
+
+        # Get final state
+        state = simulation.context.getState(getEnergy=True, getPositions=True)
+        efinal = state.getPotentialEnergy().value_in_unit(ENERGY)
+        pos = state.getPositions(asNumpy=True).value_in_unit(LENGTH)
+
+        # Calculate RMSD
+        rmsd = np.sqrt(np.sum((posinit - pos) ** 2) / len(posinit))
+
+        # Write output PDB
+        output = io.StringIO()
+        openmm_app.PDBFile.writeFile(
+            simulation.topology, state.getPositions(), output
+        )
+        relaxed_pdb = output.getvalue()
+
+        debug_data = {
+            "initial_energy": einit,
+            "final_energy": efinal,
+            "rmsd": rmsd,
+            "attempts": 1,
+            "ligands_included": [lig.resname for lig in ligands],
+            "ligand_forcefield": self.config.ligand_forcefield,
+        }
+
+        logger.info(
+            f"Minimization complete: E_init={einit:.2f}, "
+            f"E_final={efinal:.2f}, RMSD={rmsd:.3f} A"
+        )
+
+        violations = np.zeros(0)
         return relaxed_pdb, debug_data, violations
 
     def _relax_direct(self, pdb_string: str) -> Tuple[str, dict, np.ndarray]:
