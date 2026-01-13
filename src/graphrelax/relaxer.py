@@ -18,6 +18,7 @@ from graphrelax.chain_gaps import (
     split_chains_at_gaps,
 )
 from graphrelax.config import RelaxConfig
+from graphrelax.idealize import extract_ligands, restore_ligands
 
 # Add vendored LigandMPNN to path for OpenFold imports
 # Must happen before importing from openfold
@@ -63,28 +64,39 @@ class Relaxer:
         If split_chains_at_gaps is enabled, chains will be split at detected
         gaps before minimization to prevent artificial gap closure.
 
+        Ligands (non-water HETATM records) are extracted before relaxation
+        and restored afterward, since standard AMBER force fields cannot
+        parameterize arbitrary ligands.
+
         Args:
             pdb_string: PDB file contents as string
 
         Returns:
             Tuple of (relaxed_pdb_string, debug_info, violations)
         """
+        # Extract ligands before relaxation (AMBER can't parameterize them)
+        protein_pdb, ligand_lines = extract_ligands(pdb_string)
+        if ligand_lines.strip():
+            logger.debug(
+                "Extracted ligands for separate handling during relaxation"
+            )
+
         # Detect and handle chain gaps if configured
         chain_mapping = {}
         if self.config.split_chains_at_gaps:
-            gaps = detect_chain_gaps(pdb_string)
+            gaps = detect_chain_gaps(protein_pdb)
             if gaps:
                 logger.info(get_gap_summary(gaps))
-                pdb_string, chain_mapping = split_chains_at_gaps(
-                    pdb_string, gaps
+                protein_pdb, chain_mapping = split_chains_at_gaps(
+                    protein_pdb, gaps
                 )
 
         if self.config.constrained:
-            prot = protein.from_pdb_string(pdb_string)
+            prot = protein.from_pdb_string(protein_pdb)
             relaxed_pdb, debug_info, violations = self.relax_protein(prot)
         else:
             relaxed_pdb, debug_info, violations = self._relax_unconstrained(
-                pdb_string
+                protein_pdb
             )
 
         # Restore original chain IDs if chains were split
@@ -94,6 +106,9 @@ class Relaxer:
             debug_info["gaps_detected"] = len(
                 [k for k, v in chain_mapping.items() if k != v]
             )
+
+        # Restore ligands after relaxation
+        relaxed_pdb = restore_ligands(relaxed_pdb, ligand_lines)
 
         return relaxed_pdb, debug_info, violations
 
@@ -156,8 +171,10 @@ class Relaxer:
         No position restraints, no violation checking, uses OpenMM defaults.
         This is the default minimization mode.
 
+        Note: Ligands are extracted at the relax() level before calling this.
+
         Args:
-            pdb_string: PDB file contents as string
+            pdb_string: PDB file contents as string (protein-only)
 
         Returns:
             Tuple of (relaxed_pdb_string, debug_info, violations)
@@ -172,24 +189,10 @@ class Relaxer:
             f"(max_iter={self.config.max_iterations}, gpu={use_gpu})"
         )
 
-        # Separate protein (ATOM) from ligands (HETATM) for proper processing
-        # Ligands in the same chain confuse pdbfixer's terminal detection
-        atom_lines = []
-        hetatm_lines = []
-        for line in pdb_string.split("\n"):
-            if line.startswith("HETATM"):
-                hetatm_lines.append(line)
-            elif line.startswith("END"):
-                pass  # Skip END, we'll add it back
-            else:
-                atom_lines.append(line)
-
-        protein_pdb = "\n".join(atom_lines) + "\nEND\n"
-
         # Use pdbfixer to add missing atoms and terminal groups
         from pdbfixer import PDBFixer
 
-        fixer = PDBFixer(pdbfile=io.StringIO(protein_pdb))
+        fixer = PDBFixer(pdbfile=io.StringIO(pdb_string))
         fixer.findMissingResidues()
         fixer.findMissingAtoms()
         fixer.addMissingAtoms()
