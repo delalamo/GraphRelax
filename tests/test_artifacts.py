@@ -324,3 +324,81 @@ class TestRemoveArtifactsDetergentsAndLipids:
 
         assert "LDA" not in result
         assert removed["LDA"] == 1
+
+
+class TestCLIKeepLigandParsing:
+    """Tests for CLI --keep-ligand argument parsing."""
+
+    def test_single_ligand(self):
+        """Test parsing a single ligand name."""
+        from graphrelax.cli import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args(
+            ["-i", "in.pdb", "-o", "out.pdb", "--keep-ligand", "GOL"]
+        )
+        assert args.keep_ligand == "GOL"
+
+    def test_comma_separated_ligands(self):
+        """Test parsing comma-separated ligand names."""
+        from graphrelax.cli import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args(
+            ["-i", "in.pdb", "-o", "out.pdb", "--keep-ligand", "GOL,SO4,EDO"]
+        )
+        assert args.keep_ligand == "GOL,SO4,EDO"
+
+        # Test the parsing logic that builds the keep_residues set
+        keep_residues = set()
+        if args.keep_ligand:
+            for resname in args.keep_ligand.split(","):
+                resname = resname.strip().upper()
+                if resname:
+                    keep_residues.add(resname)
+
+        assert keep_residues == {"GOL", "SO4", "EDO"}
+
+    def test_comma_separated_with_spaces(self):
+        """Test parsing comma-separated ligand names with spaces."""
+        from graphrelax.cli import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args(
+            ["-i", "in.pdb", "-o", "out.pdb", "--keep-ligand", "GOL, SO4, EDO"]
+        )
+
+        keep_residues = set()
+        if args.keep_ligand:
+            for resname in args.keep_ligand.split(","):
+                resname = resname.strip().upper()
+                if resname:
+                    keep_residues.add(resname)
+
+        assert keep_residues == {"GOL", "SO4", "EDO"}
+
+    def test_lowercase_normalized_to_uppercase(self):
+        """Test that lowercase ligand names are normalized to uppercase."""
+        from graphrelax.cli import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args(
+            ["-i", "in.pdb", "-o", "out.pdb", "--keep-ligand", "gol,so4"]
+        )
+
+        keep_residues = set()
+        if args.keep_ligand:
+            for resname in args.keep_ligand.split(","):
+                resname = resname.strip().upper()
+                if resname:
+                    keep_residues.add(resname)
+
+        assert keep_residues == {"GOL", "SO4"}
+
+    def test_no_keep_ligand(self):
+        """Test that keep_ligand is None when not provided."""
+        from graphrelax.cli import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args(["-i", "in.pdb", "-o", "out.pdb"])
+        assert args.keep_ligand is None

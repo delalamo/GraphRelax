@@ -274,12 +274,10 @@ Examples:
     preprocess_group.add_argument(
         "--keep-ligand",
         type=str,
-        action="append",
-        metavar="RESNAME",
+        metavar="RESNAMES",
         help=(
-            "Keep a specific ligand residue that would otherwise be stripped "
-            "as an artifact. Can be used multiple times. "
-            "Example: --keep-ligand GOL --keep-ligand SO4"
+            "Keep specific ligand residue(s) that would otherwise be stripped "
+            "as artifacts. Comma-separated. Example: --keep-ligand GOL,SO4"
         ),
     )
     preprocess_group.add_argument(
@@ -433,10 +431,13 @@ def main(args=None) -> int:
         ligand_smiles=ligand_smiles,
     )
 
-    # Build keep_residues set from --keep-ligand flags
+    # Build keep_residues set from --keep-ligand flag (comma-separated)
     keep_residues = set()
     if opts.keep_ligand:
-        keep_residues = {r.upper() for r in opts.keep_ligand}
+        for resname in opts.keep_ligand.split(","):
+            resname = resname.strip().upper()
+            if resname:
+                keep_residues.add(resname)
 
     idealize_config = IdealizeConfig(
         enabled=opts.pre_idealize,
