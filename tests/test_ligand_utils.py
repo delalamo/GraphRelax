@@ -4,7 +4,8 @@ from graphrelax.ligand_utils import (
     WATER_RESIDUES,
     LigandInfo,
     extract_ligands_from_pdb,
-    get_common_ligand_smiles,
+    get_ion_smiles,
+    is_single_atom_ligand,
 )
 
 
@@ -82,37 +83,56 @@ class TestExtractLigands:
         assert resnames == {"HEM", "NAD"}
 
 
-class TestCommonSmiles:
-    """Tests for common ligand SMILES lookup."""
-
-    def test_heme_smiles_present(self):
-        """Test that HEM SMILES is defined."""
-        smiles = get_common_ligand_smiles()
-        assert "HEM" in smiles
-        assert len(smiles["HEM"]) > 0
-        # Should contain iron
-        assert "Fe" in smiles["HEM"]
-
-    def test_atp_smiles_present(self):
-        """Test that ATP SMILES is defined."""
-        smiles = get_common_ligand_smiles()
-        assert "ATP" in smiles
-        # ATP has phosphate groups
-        assert "P" in smiles["ATP"]
-
-    def test_common_cofactors(self):
-        """Test that common cofactors are defined."""
-        smiles = get_common_ligand_smiles()
-        expected = ["NAD", "FAD", "ATP", "ADP", "GTP"]
-        for cofactor in expected:
-            assert cofactor in smiles, f"{cofactor} should be in common SMILES"
+class TestIonSmiles:
+    """Tests for ion SMILES lookup."""
 
     def test_common_ions(self):
         """Test that common metal ions are defined."""
-        smiles = get_common_ligand_smiles()
+        smiles = get_ion_smiles()
         ions = ["ZN", "MG", "CA", "FE", "MN", "CU"]
         for ion in ions:
-            assert ion in smiles, f"{ion} should be in common SMILES"
+            assert ion in smiles, f"{ion} should be in ion SMILES"
+
+    def test_ion_smiles_format(self):
+        """Test that ion SMILES have proper format with charge."""
+        smiles = get_ion_smiles()
+        # All ions should have brackets indicating charged species
+        for ion, smi in smiles.items():
+            assert smi.startswith("["), f"{ion} SMILES should start with ["
+            assert smi.endswith("]"), f"{ion} SMILES should end with ]"
+
+    def test_halide_ions(self):
+        """Test that halide ions are defined."""
+        smiles = get_ion_smiles()
+        assert "CL" in smiles
+        assert smiles["CL"] == "[Cl-]"
+
+
+class TestSingleAtomLigand:
+    """Tests for single atom ligand detection."""
+
+    def test_ion_is_single_atom(self):
+        """Test that ions are detected as single atoms."""
+        ligand = LigandInfo(
+            resname="ZN",
+            chain_id="A",
+            resnum=1,
+            pdb_lines=["HETATM    1 ZN   ZN  A   1       0.0   0.0   0.0"],
+        )
+        assert is_single_atom_ligand(ligand)
+
+    def test_heme_is_not_single_atom(self):
+        """Test that multi-atom ligands are not single atoms."""
+        ligand = LigandInfo(
+            resname="HEM",
+            chain_id="A",
+            resnum=1,
+            pdb_lines=[
+                "HETATM    1 FE   HEM A   1       0.0   0.0   0.0",
+                "HETATM    2  NA  HEM A   1       1.0   0.0   0.0",
+            ],
+        )
+        assert not is_single_atom_ligand(ligand)
 
 
 class TestLigandInfo:

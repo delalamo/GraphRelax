@@ -73,57 +73,14 @@ def extract_ligands_from_pdb(pdb_string: str) -> Tuple[str, List[LigandInfo]]:
     return protein_pdb, ligands
 
 
-def get_common_ligand_smiles() -> Dict[str, str]:
+def get_ion_smiles() -> Dict[str, str]:
     """
-    Return SMILES for commonly encountered ligands.
+    Return SMILES for common ions.
 
-    This helps with ligands where automatic bond perception may fail.
+    Ions are single atoms that cannot be parsed from PDB coordinates,
+    so we need explicit SMILES for them.
     """
     return {
-        # Heme and porphyrins
-        "HEM": (
-            "[Fe+2]12([N-]3C(=C4C(=C([N-]1C(=C5C(C(=C([N-]2C(=C3C)C(=C)"
-            "C)C=C5C)CCC(=O)O)C)C=C6[N-]4C(=C(C)C6C=C)C(C)=C)CCC(=O)O)C)C=C)C"
-        ),
-        "HEC": (
-            "[Fe+2]12([N-]3C(=C4C(=C([N-]1C(=C5C(C(=C([N-]2C(=C3C)C(=C)"
-            "C)C=C5C)CCC(=O)O)C)C=C6[N-]4C(=C(C)C6C=C)C(C)=C)CCC(=O)O)C)C=C)C"
-        ),
-        # Common cofactors
-        "NAD": (
-            "NC(=O)c1ccc[n+](c1)[C@@H]1O[C@H](COP(=O)([O-])OP(=O)([O-])"
-            "OC[C@H]2O[C@H]([C@H](O)[C@@H]2O)n2cnc3c(N)ncnc23)[C@@H](O)[C@H]1O"
-        ),
-        "NAP": (  # NADP
-            "NC(=O)c1ccc[n+](c1)[C@@H]1O[C@H](COP(=O)([O-])OP(=O)([O-])"
-            "OC[C@H]2O[C@H]([C@H](OP(=O)([O-])[O-])[C@@H]2O)n2cnc3c(N)ncnc23)"
-            "[C@@H](O)[C@H]1O"
-        ),
-        "FAD": (
-            "Cc1cc2nc3c(=O)[nH]c(=O)nc-3n(C[C@H](O)[C@H](O)[C@H](O)"
-            "COP(=O)([O-])OP(=O)([O-])OC[C@H]3O[C@H]([C@H](O)[C@@H]3O)"
-            "n3cnc4c(N)ncnc43)c2cc1C"
-        ),
-        "FMN": (
-            "Cc1cc2nc3c(=O)[nH]c(=O)nc-3n(C[C@H](O)[C@H](O)[C@H](O)"
-            "COP(=O)([O-])[O-])c2cc1C"
-        ),
-        "ATP": (
-            "Nc1ncnc2n(cnc12)[C@@H]1O[C@H](COP(=O)([O-])OP(=O)([O-])"
-            "OP(=O)([O-])[O-])[C@@H](O)[C@H]1O"
-        ),
-        "ADP": (
-            "Nc1ncnc2n(cnc12)[C@@H]1O[C@H](COP(=O)([O-])OP(=O)([O-])[O-])"
-            "[C@@H](O)[C@H]1O"
-        ),
-        "AMP": (
-            "Nc1ncnc2n(cnc12)[C@@H]1O[C@H](COP(=O)([O-])[O-])[C@@H](O)[C@H]1O"
-        ),
-        "GTP": (
-            "Nc1nc2n(cnc2c(=O)[nH]1)[C@@H]1O[C@H](COP(=O)([O-])OP(=O)([O-])"
-            "OP(=O)([O-])[O-])[C@@H](O)[C@H]1O"
-        ),
-        # Common ions (simple)
         "ZN": "[Zn+2]",
         "MG": "[Mg+2]",
         "CA": "[Ca+2]",
@@ -132,59 +89,76 @@ def get_common_ligand_smiles() -> Dict[str, str]:
         "MN": "[Mn+2]",
         "CU": "[Cu+2]",
         "CO": "[Co+2]",
-        # Common small molecules
-        "ACE": "CC(=O)",  # Acetyl
-        "NME": "NC",  # N-methyl
-        "ACT": "CC(=O)[O-]",  # Acetate
-        "GOL": "OCC(O)CO",  # Glycerol
-        "EDO": "OCCO",  # Ethylene glycol
-        "PEG": "COCCOCCOCCO",  # PEG fragment
-        "SO4": "[O-]S(=O)(=O)[O-]",  # Sulfate
-        "PO4": "[O-]P(=O)([O-])[O-]",  # Phosphate
-        "CL": "[Cl-]",  # Chloride
+        "NA": "[Na+]",
+        "K": "[K+]",
+        "CL": "[Cl-]",
     }
+
+
+def is_single_atom_ligand(ligand: LigandInfo) -> bool:
+    """Check if ligand is a single atom (ion)."""
+    return len(ligand.pdb_lines) == 1
 
 
 def create_openff_molecule(ligand: LigandInfo, smiles: Optional[str] = None):
     """
     Create an OpenFF Toolkit Molecule from ligand info.
 
+    Attempts to create the molecule in this order:
+    1. From user-provided SMILES (if given)
+    2. From ion lookup table (for single-atom ligands)
+    3. From PDB coordinates via RDKit bond perception
+    4. From direct OpenFF PDB parsing
+
     Args:
         ligand: LigandInfo with PDB coordinates
-        smiles: Optional SMILES string (if known)
+        smiles: Optional SMILES string (overrides automatic detection)
 
     Returns:
         openff.toolkit.Molecule
     """
     from openff.toolkit import Molecule
 
+    # 1. User-provided SMILES takes precedence
     if smiles:
-        # Create from SMILES
         try:
             mol = Molecule.from_smiles(smiles, allow_undefined_stereo=True)
             logger.debug(f"Created molecule for {ligand.resname} from SMILES")
             return mol
         except Exception as e:
-            logger.warning(f"Failed to create from SMILES: {e}")
+            logger.warning(f"Failed to create from provided SMILES: {e}")
 
-    # Try to create from PDB block
+    # 2. Handle ions (single atoms) - need explicit SMILES
+    if is_single_atom_ligand(ligand):
+        ion_smiles = get_ion_smiles()
+        if ligand.resname in ion_smiles:
+            mol = Molecule.from_smiles(
+                ion_smiles[ligand.resname], allow_undefined_stereo=True
+            )
+            logger.debug(f"Created ion molecule for {ligand.resname}")
+            return mol
+        else:
+            raise ValueError(
+                f"Unknown ion '{ligand.resname}'. Provide SMILES via "
+                f"ligand_smiles={{'{ligand.resname}': '[Element+charge]'}}"
+            )
+
+    # 3. Try RDKit bond perception from PDB coordinates
     pdb_block = "\n".join(ligand.pdb_lines) + "\nEND\n"
-
     try:
-        # Try direct PDB parsing
+        mol = _create_molecule_via_rdkit(pdb_block)
+        logger.debug(f"Created molecule for {ligand.resname} via RDKit")
+        return mol
+    except Exception as e:
+        logger.debug(f"RDKit parsing failed: {e}")
+
+    # 4. Fallback: direct OpenFF PDB parsing
+    try:
         mol = Molecule.from_pdb_file(
             io.StringIO(pdb_block),
             allow_undefined_stereo=True,
         )
         logger.debug(f"Created molecule for {ligand.resname} from PDB")
-        return mol
-    except Exception as e:
-        logger.debug(f"Direct PDB parsing failed: {e}")
-
-    # Fallback: use RDKit
-    try:
-        mol = _create_molecule_via_rdkit(pdb_block)
-        logger.debug(f"Created molecule for {ligand.resname} via RDKit")
         return mol
     except Exception as e:
         raise ValueError(

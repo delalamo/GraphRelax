@@ -22,7 +22,6 @@ from graphrelax.ligand_utils import (
     WATER_RESIDUES,
     create_openff_molecule,
     extract_ligands_from_pdb,
-    get_common_ligand_smiles,
     ligand_pdb_to_topology,
 )
 
@@ -324,9 +323,8 @@ class Relaxer:
 
         # Step 1: Separate protein and ligands
         protein_pdb, ligands = extract_ligands_from_pdb(pdb_string)
-        logger.info(
-            f"Found {len(ligands)} ligand(s): {[l.resname for l in ligands]}"
-        )
+        ligand_names = [lig.resname for lig in ligands]
+        logger.info(f"Found {len(ligands)} ligand(s): {ligand_names}")
 
         # Step 2: Fix protein with pdbfixer (without ligands)
         fixer = PDBFixer(pdbfile=io.StringIO(protein_pdb))
@@ -335,12 +333,12 @@ class Relaxer:
         fixer.addMissingAtoms()
 
         # Step 3: Create OpenFF molecules for ligands
-        known_smiles = get_common_ligand_smiles()
-        known_smiles.update(self.config.ligand_smiles or {})
+        # User-provided SMILES override automatic detection
+        user_smiles = self.config.ligand_smiles or {}
 
         openff_molecules = []
         for ligand in ligands:
-            smiles = known_smiles.get(ligand.resname)
+            smiles = user_smiles.get(ligand.resname)
             try:
                 mol = create_openff_molecule(ligand, smiles=smiles)
                 openff_molecules.append(mol)
