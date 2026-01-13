@@ -53,6 +53,7 @@ class IdealizeConfig:
     fix_cis_omega: bool = True  # Correct non-trans peptide bonds (except Pro)
     post_idealize_stiffness: float = 10.0  # kcal/mol/A^2 for restraint
     add_missing_residues: bool = True  # Add missing residues from SEQRES
+    close_chainbreaks: bool = True  # Close chain breaks during idealization
 
 
 @dataclass

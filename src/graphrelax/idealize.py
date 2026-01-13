@@ -586,15 +586,17 @@ def idealize_structure(
     if ligand_lines.strip():
         logger.info("Extracted ligands for separate handling")
 
-    # Step 2: Detect chain gaps
-    gaps = detect_chain_gaps(protein_pdb)
-    if gaps:
-        logger.info(f"Detected {len(gaps)} chain gap(s)")
-
-    # Step 3: Split chains at gaps
+    # Step 2: Detect chain gaps (only if we want to retain them)
+    gaps = []
     chain_mapping = {}
-    if gaps:
-        protein_pdb, chain_mapping = split_chains_at_gaps(protein_pdb, gaps)
+    if not config.close_chainbreaks:
+        gaps = detect_chain_gaps(protein_pdb)
+        if gaps:
+            logger.info(f"Detected {len(gaps)} chain gap(s) - will be retained")
+            # Step 3: Split chains at gaps to prevent closure
+            protein_pdb, chain_mapping = split_chains_at_gaps(protein_pdb, gaps)
+    else:
+        logger.info("Chain breaks will be closed during idealization")
 
     # Step 4: Parse structure and extract/correct dihedrals
     parser = PDBParser(QUIET=True)
