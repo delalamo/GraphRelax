@@ -8,17 +8,37 @@ on:
 jobs:
   unit-tests:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf /usr/local/lib/android
+          df -h
+
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v3
         with:
           python-version: "3.11"
+          channels: conda-forge
+          channel-priority: strict
+          activate-environment: test
+          auto-activate-base: false
+          miniforge-version: latest
 
-      - name: Install dependencies
+      - name: Install conda dependencies
         run: |
-          pip install -e .[test]
+          conda install -y --no-update-deps pdbfixer
+
+      - name: Install pip dependencies
+        run: |
+          pip install --no-cache-dir -e .[test]
 
       - name: Run unit tests with coverage
         run: |

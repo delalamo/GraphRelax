@@ -21,6 +21,8 @@ repos:
         args:
           - "--max-line-length=80"
           - "--extend-ignore=E203,W503"
+          # Allow long lines in test files containing PDB fixture data
+          - "--per-file-ignores=tests/test_idealize.py:E501"
 
   - repo: https://github.com/PyCQA/pylint
     rev: v3.3.7

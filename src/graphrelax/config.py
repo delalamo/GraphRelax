@@ -57,6 +57,17 @@ class RelaxConfig:
 
 
 @dataclass
+class IdealizeConfig:
+    """Configuration for structure idealization preprocessing."""
+
+    enabled: bool = False  # Idealization disabled by default
+    fix_cis_omega: bool = True  # Correct non-trans peptide bonds (except Pro)
+    post_idealize_stiffness: float = 10.0  # kcal/mol/A^2 for restraint
+    add_missing_residues: bool = True  # Add missing residues from SEQRES
+    close_chainbreaks: bool = True  # Close chain breaks during idealization
+
+
+@dataclass
 class PipelineConfig:
     """Configuration for the full pipeline."""
 
@@ -70,3 +81,4 @@ class PipelineConfig:
     keep_residues: Set[str] = field(default_factory=set)  # Whitelist residues
     design: DesignConfig = field(default_factory=DesignConfig)
     relax: RelaxConfig = field(default_factory=RelaxConfig)
+    idealize: IdealizeConfig = field(default_factory=IdealizeConfig)

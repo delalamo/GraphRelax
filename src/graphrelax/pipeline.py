@@ -7,6 +7,7 @@ from typing import Optional
 
 from graphrelax.config import PipelineConfig, PipelineMode
 from graphrelax.designer import Designer
+from graphrelax.idealize import idealize_structure
 from graphrelax.relaxer import Relaxer
 from graphrelax.resfile import DesignSpec, ResfileParser
 from graphrelax.structure_io import (
@@ -199,6 +200,19 @@ class Pipeline:
 
         # Convert to PDB format for internal processing if needed
         current_pdb = ensure_pdb_format(current_structure, input_pdb)
+
+        # Apply pre-idealization if enabled
+        if self.config.idealize.enabled:
+            logger.info("Running pre-idealization...")
+            current_pdb, gaps = idealize_structure(
+                current_pdb, self.config.idealize
+            )
+            if gaps:
+                logger.info(
+                    f"Idealized with {len(gaps)} chain gap(s) preserved"
+                )
+            else:
+                logger.info("Structure idealized (no chain gaps detected)")
 
         # Store input as temp file for processing
         with tempfile.NamedTemporaryFile(

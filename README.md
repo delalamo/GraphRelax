@@ -6,67 +6,28 @@ GraphRelax combines **LigandMPNN** (for sequence design and side-chain packing) 
 
 ## Installation
 
-### Quick Start (Recommended)
+GraphRelax requires pdbfixer, which is only available via conda-forge. We recommend using mamba for faster installation.
 
-The easiest way to install GraphRelax with all dependencies is using mamba (much faster than conda):
-
-```bash
-# Install mamba if you don't have it (or use micromamba)
-conda install -n base -c conda-forge mamba
-
-# Create environment from file
-mamba env create -f environment.yml
-conda activate graphrelax
-
-# Install GraphRelax
-pip install -e .
-```
-
-Or with **micromamba** (standalone, no conda required):
+### From PyPI (Latest Release)
 
 ```bash
-# Install micromamba (see https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html)
-# Then:
-micromamba create -f environment.yml
-micromamba activate graphrelax
-pip install -e .
-```
+# First, install pdbfixer via mamba/conda (required)
+mamba install -c conda-forge pdbfixer
 
-This installs all dependencies including ligand support.
-
-### Standard Installation
-
-For basic usage without ligand support:
-
-```bash
+# Then install graphrelax from PyPI
 pip install graphrelax
 ```
 
-LigandMPNN model weights (~40MB) are downloaded automatically on first run.
+This installs the latest stable release.
 
-### Full Installation (with Ligand Support)
-
-Some dependencies are only available via conda-forge and must be installed before pip:
+### From Source (Latest Development Version)
 
 ```bash
-# Step 1: Install conda-forge dependencies (use mamba for speed)
-mamba install -c conda-forge \
-    pdbfixer \
-    openmmforcefields>=0.13.0 \
-    openff-toolkit>=0.14.0 \
-    rdkit>=2023.09.1
+# First, install pdbfixer via mamba/conda (required)
+mamba install -c conda-forge pdbfixer
 
-# Step 2: Install GraphRelax
-pip install graphrelax
-```
-
-> **Note:** `mamba` is a drop-in replacement for `conda` that's 10-100x faster. Install it with `conda install -n base -c conda-forge mamba`, or use `micromamba` as a standalone tool.
-
-### Development Installation
-
-```bash
 # Clone the repository
-git clone https://github.com/your-username/GraphRelax.git
+git clone https://github.com/delalamo/GraphRelax.git
 cd GraphRelax
 
 # Option A: Use environment.yml with mamba (recommended)
@@ -79,29 +40,37 @@ mamba install -c conda-forge pdbfixer openmmforcefields openff-toolkit rdkit
 pip install -e .
 ```
 
+This installs the latest development version with all recent changes.
+
+LigandMPNN model weights (~40MB) are downloaded automatically on first run.
+
+> **Note:** `mamba` is a drop-in replacement for `conda` that's 10-100x faster. Install it with `conda install -n base -c conda-forge mamba`, or use `micromamba` as a standalone tool.
+
 ### Dependencies
 
-#### Pip packages (installed automatically)
+Core dependencies (installed automatically via pip):
 
-| Package        | Version | Purpose                  |
-| -------------- | ------- | ------------------------ |
-| torch          | >= 2.0  | Neural network inference |
-| numpy          | < 2     | Array operations         |
-| openmm         | latest  | Molecular dynamics       |
-| biopython      | latest  | Structure parsing        |
-| prody          | latest  | Protein analysis         |
-| absl-py        | latest  | Configuration            |
-| ml-collections | latest  | Configuration            |
-| dm-tree        | latest  | Nested data structures   |
+- Python >= 3.9
+- PyTorch >= 2.0
+- NumPy < 2.0 (PyTorch <2.5 is incompatible with NumPy 2.x)
+- OpenMM
+- BioPython
+- ProDy
+- dm-tree
+- absl-py
+- ml-collections
 
-#### Conda-forge packages (manual installation required)
+Required (must be installed separately via conda):
 
-| Package           | Version      | Purpose                     | Required for                 |
-| ----------------- | ------------ | --------------------------- | ---------------------------- |
-| pdbfixer          | latest       | Structure preparation       | `--constrained-minimization` |
-| openmmforcefields | >= 0.13.0    | Small molecule force fields | `--include-ligands`          |
-| openff-toolkit    | >= 0.14.0    | OpenFF Molecule creation    | `--include-ligands`          |
-| rdkit             | >= 2023.09.1 | Bond perception from PDB    | `--include-ligands`          |
+- pdbfixer (conda-forge only, not on PyPI)
+
+Optional (for ligand support):
+
+| Package           | Version      | Purpose                     |
+| ----------------- | ------------ | --------------------------- |
+| openmmforcefields | >= 0.13.0    | Small molecule force fields |
+| openff-toolkit    | >= 0.14.0    | OpenFF Molecule creation    |
+| rdkit             | >= 2023.09.1 | Bond perception from PDB    |
 
 ### Docker
 
@@ -248,7 +217,7 @@ graphrelax -i protein_with_ligand.pdb -o designed.pdb \
 graphrelax -i protein_with_ligand.pdb -o designed.pdb --ignore-ligands
 ```
 
-**Requires:** `conda install -c conda-forge openmmforcefields openff-toolkit rdkit`
+**Requires:** `mamba install -c conda-forge openmmforcefields openff-toolkit rdkit`
 
 For design around ligands, use `ligand_mpnn` model type:
 
@@ -274,7 +243,33 @@ graphrelax -i protein_with_ligand.pdb -o designed.pdb \
     --design --constrained-minimization
 ```
 
-**Requires:** `conda install -c conda-forge pdbfixer`
+**Requires:** `mamba install -c conda-forge pdbfixer`
+
+### Pre-Idealization
+
+GraphRelax can optionally idealize backbone geometry before processing. This is useful for structures with distorted bond lengths or angles (e.g., from homology modeling or low-resolution experimental data). The idealization step:
+
+1. Corrects backbone bond lengths and angles to ideal values
+2. Preserves phi/psi/omega dihedral angles
+3. Adds missing atoms and optionally missing residues from SEQRES
+4. Runs constrained minimization to relieve local strain
+5. By default, closes chain breaks (gaps) in the structure
+
+```bash
+# Idealize before relaxation
+graphrelax -i input.pdb -o relaxed.pdb --pre-idealize
+
+# Idealize but don't add missing residues from SEQRES
+graphrelax -i input.pdb -o relaxed.pdb --pre-idealize --ignore-missing-residues
+
+# Idealize but keep chain breaks as separate chains (don't close gaps)
+graphrelax -i input.pdb -o relaxed.pdb --pre-idealize --retain-chainbreaks
+
+# Combine with design
+graphrelax -i input.pdb -o designed.pdb --pre-idealize --design
+```
+
+**Note:** Pre-idealization requires pdbfixer (`mamba install -c conda-forge pdbfixer`).
 
 ### Resfile Format
 
@@ -356,6 +351,17 @@ Input preprocessing:
                         artifacts. By default, common artifacts are removed.
   --keep-ligand RESNAME Keep specific ligand residue (can be used multiple
                         times). Example: --keep-ligand GOL --keep-ligand SO4
+  --pre-idealize        Idealize backbone geometry before processing.
+                        Corrects bond lengths/angles while preserving
+                        dihedral angles. By default, chain breaks are closed.
+                        Requires pdbfixer.
+  --ignore-missing-residues
+                        Do not add missing residues from SEQRES during
+                        pre-idealization. By default, missing terminal and
+                        internal loop residues are added.
+  --retain-chainbreaks  Do not close chain breaks during pre-idealization.
+                        By default, chain breaks are closed by treating all
+                        segments as a single chain.
 
 Scoring:
   --scorefile FILE      Output scorefile with energy terms
@@ -379,7 +385,7 @@ SCORE:     -228.12       -228.12        11.8         44.2             22.8      
 
 ```python
 from graphrelax import Pipeline, PipelineConfig, PipelineMode
-from graphrelax.config import DesignConfig, RelaxConfig
+from graphrelax.config import DesignConfig, RelaxConfig, IdealizeConfig
 from pathlib import Path
 
 # Configure pipeline
@@ -394,6 +400,11 @@ config = PipelineConfig(
     relax=RelaxConfig(
         stiffness=10.0,
         constrained=False,  # Default: unconstrained minimization
+    ),
+    idealize=IdealizeConfig(
+        enabled=True,  # Enable pre-idealization
+        add_missing_residues=True,  # Add missing residues from SEQRES
+        close_chainbreaks=True,  # Close chain breaks (default)
     ),
 )
 
