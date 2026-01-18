@@ -27,6 +27,7 @@ from openfold.np.residue_constants import (
 )
 from openfold.utils import feats
 from openfold.utils.rigid_utils import Rigid
+from tqdm import tqdm
 
 torch_pi = torch.tensor(np.pi, device="cpu")
 
@@ -101,7 +102,12 @@ def pack_side_chains(
     feature_dict["h_V"] = h_V
     feature_dict["h_E"] = h_E
     feature_dict["E_idx"] = E_idx
-    for step in range(num_denoising_steps):
+
+    step_range = range(num_denoising_steps)
+    if num_denoising_steps > 1:
+        step_range = tqdm(step_range, desc="    Denoising steps", unit="step")
+
+    for step in step_range:
         mean, concentration, mix_logits = model_sc.decode(feature_dict)
         mix = D.Categorical(logits=mix_logits)
         comp = D.VonMises(mean, concentration)

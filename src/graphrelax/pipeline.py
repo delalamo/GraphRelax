@@ -5,6 +5,8 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+from tqdm import tqdm
+
 from graphrelax.config import PipelineConfig, PipelineMode
 from graphrelax.designer import Designer
 from graphrelax.idealize import idealize_structure
@@ -92,7 +94,13 @@ class Pipeline:
         all_results = []
         all_scores = []
 
-        for output_idx in range(1, self.config.n_outputs + 1):
+        output_range = range(1, self.config.n_outputs + 1)
+        if self.config.n_outputs > 1:
+            output_range = tqdm(
+                output_range, desc="Generating outputs", unit="output"
+            )
+
+        for output_idx in output_range:
             logger.info(
                 f"Generating output {output_idx}/{self.config.n_outputs}"
             )
@@ -210,7 +218,13 @@ class Pipeline:
         original_native_sequence = None
 
         try:
-            for iteration in range(1, self.config.n_iterations + 1):
+            iteration_range = range(1, self.config.n_iterations + 1)
+            if self.config.n_iterations > 1:
+                iteration_range = tqdm(
+                    iteration_range, desc="  Iterations", unit="iter"
+                )
+
+            for iteration in iteration_range:
                 logger.info(
                     f"  Iteration {iteration}/{self.config.n_iterations}"
                 )

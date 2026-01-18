@@ -30,6 +30,7 @@ from openfold.np import (
     residue_constants,
 )
 from openfold.np.relax import cleanup, utils
+from tqdm import tqdm
 
 try:
     from simtk import openmm, unit
@@ -487,25 +488,41 @@ def _run_one_iteration(
     start = time.perf_counter()
     minimized = False
     attempts = 0
-    while not minimized and attempts < max_attempts:
-        attempts += 1
-        try:
-            logging.info(
-                "Minimizing protein, attempt %d of %d.", attempts, max_attempts
-            )
-            ret = _openmm_minimize(
-                pdb_string,
-                max_iterations=max_iterations,
-                tolerance=tolerance,
-                stiffness=stiffness,
-                restraint_set=restraint_set,
-                exclude_residues=exclude_residues,
-                use_gpu=use_gpu,
-            )
-            minimized = True
-        except Exception as e:  # pylint: disable=broad-except
-            print(e)
-            logging.info(e)
+
+    pbar = None
+    if max_attempts > 1:
+        pbar = tqdm(
+            total=max_attempts, desc="    Minimization attempts", unit="attempt"
+        )
+
+    try:
+        while not minimized and attempts < max_attempts:
+            attempts += 1
+            try:
+                logging.info(
+                    "Minimizing protein, attempt %d of %d.",
+                    attempts,
+                    max_attempts,
+                )
+                ret = _openmm_minimize(
+                    pdb_string,
+                    max_iterations=max_iterations,
+                    tolerance=tolerance,
+                    stiffness=stiffness,
+                    restraint_set=restraint_set,
+                    exclude_residues=exclude_residues,
+                    use_gpu=use_gpu,
+                )
+                minimized = True
+            except Exception as e:  # pylint: disable=broad-except
+                print(e)
+                logging.info(e)
+            if pbar:
+                pbar.update(1)
+    finally:
+        if pbar:
+            pbar.close()
+
     if not minimized:
         raise ValueError(f"Minimization failed after {max_attempts} attempts.")
     ret["opt_time"] = time.perf_counter() - start
@@ -566,47 +583,60 @@ def run_pipeline(
     violations = np.inf
     iteration = 0
 
-    while violations > 0 and iteration < max_outer_iterations:
-        ret = _run_one_iteration(
-            pdb_string=pdb_string,
-            exclude_residues=exclude_residues,
-            max_iterations=max_iterations,
-            tolerance=tolerance,
-            stiffness=stiffness,
-            restraint_set=restraint_set,
-            max_attempts=max_attempts,
-            use_gpu=use_gpu,
+    pbar = None
+    if max_outer_iterations > 1:
+        pbar = tqdm(
+            total=max_outer_iterations, desc="  Relax iterations", unit="iter"
         )
 
-        headers = protein.get_pdb_headers(prot)
-        if len(headers) > 0:
-            ret["min_pdb"] = "\n".join(["\n".join(headers), ret["min_pdb"]])
+    try:
+        while violations > 0 and iteration < max_outer_iterations:
+            ret = _run_one_iteration(
+                pdb_string=pdb_string,
+                exclude_residues=exclude_residues,
+                max_iterations=max_iterations,
+                tolerance=tolerance,
+                stiffness=stiffness,
+                restraint_set=restraint_set,
+                max_attempts=max_attempts,
+                use_gpu=use_gpu,
+            )
 
-        prot = protein.from_pdb_string(ret["min_pdb"])
-        if place_hydrogens_every_iteration:
-            pdb_string = clean_protein(prot, checks=True)
-        else:
-            pdb_string = ret["min_pdb"]
-        ret.update(get_violation_metrics(prot))
-        ret.update(
-            {
-                "num_exclusions": len(exclude_residues),
-                "iteration": iteration,
-            }
-        )
-        violations = ret["violations_per_residue"]
-        exclude_residues = exclude_residues.union(ret["residue_violations"])
+            headers = protein.get_pdb_headers(prot)
+            if len(headers) > 0:
+                ret["min_pdb"] = "\n".join(["\n".join(headers), ret["min_pdb"]])
 
-        logging.info(
-            "Iteration completed: Einit %.2f Efinal %.2f Time %.2f s "
-            "num residue violations %d num residue exclusions %d ",
-            ret["einit"],
-            ret["efinal"],
-            ret["opt_time"],
-            ret["num_residue_violations"],
-            ret["num_exclusions"],
-        )
-        iteration += 1
+            prot = protein.from_pdb_string(ret["min_pdb"])
+            if place_hydrogens_every_iteration:
+                pdb_string = clean_protein(prot, checks=True)
+            else:
+                pdb_string = ret["min_pdb"]
+            ret.update(get_violation_metrics(prot))
+            ret.update(
+                {
+                    "num_exclusions": len(exclude_residues),
+                    "iteration": iteration,
+                }
+            )
+            violations = ret["violations_per_residue"]
+            exclude_residues = exclude_residues.union(ret["residue_violations"])
+
+            logging.info(
+                "Iteration completed: Einit %.2f Efinal %.2f Time %.2f s "
+                "num residue violations %d num residue exclusions %d ",
+                ret["einit"],
+                ret["efinal"],
+                ret["opt_time"],
+                ret["num_residue_violations"],
+                ret["num_exclusions"],
+            )
+            iteration += 1
+            if pbar:
+                pbar.update(1)
+    finally:
+        if pbar:
+            pbar.close()
+
     return ret
 
 
