@@ -1,6 +1,7 @@
 # flake8: noqa
 # This is vendored code from LigandMPNN - style issues are preserved from upstream
 import sys
+from typing import Optional
 
 import numpy as np
 import torch
@@ -67,6 +68,7 @@ def pack_side_chains(
     num_samples=10,
     repack_everything=True,
     num_context_atoms=16,
+    pbar: Optional[tqdm] = None,
 ):
     device = feature_dict["X"].device
     torsion_dict = make_torsion_features(feature_dict, repack_everything)
@@ -103,11 +105,7 @@ def pack_side_chains(
     feature_dict["h_E"] = h_E
     feature_dict["E_idx"] = E_idx
 
-    step_range = range(num_denoising_steps)
-    if num_denoising_steps > 1:
-        step_range = tqdm(step_range, desc="    Denoising steps", unit="step")
-
-    for step in step_range:
+    for step in range(num_denoising_steps):
         mean, concentration, mix_logits = model_sc.decode(feature_dict)
         mix = D.Categorical(logits=mix_logits)
         comp = D.VonMises(mean, concentration)

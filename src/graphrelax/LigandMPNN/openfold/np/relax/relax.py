@@ -16,11 +16,12 @@
 # limitations under the License.
 
 """Amber relaxation."""
-from typing import Any, Dict, Sequence, Tuple
+from typing import Any, Dict, Optional, Sequence, Tuple
 
 import numpy as np
 from openfold.np import protein
 from openfold.np.relax import amber_minimize, utils
+from tqdm import tqdm
 
 
 class AmberRelaxation(object):
@@ -61,7 +62,7 @@ class AmberRelaxation(object):
         self._use_gpu = use_gpu
 
     def process(
-        self, *, prot: protein.Protein
+        self, *, prot: protein.Protein, pbar: Optional[tqdm] = None
     ) -> Tuple[str, Dict[str, Any], np.ndarray]:
         """Runs Amber relax on a prediction, adds hydrogens, returns PDB string."""
         out = amber_minimize.run_pipeline(
@@ -72,6 +73,7 @@ class AmberRelaxation(object):
             exclude_residues=self._exclude_residues,
             max_outer_iterations=self._max_outer_iterations,
             use_gpu=self._use_gpu,
+            pbar=pbar,
         )
         min_pos = out["pos"]
         start_pos = out["posinit"]

@@ -94,66 +94,72 @@ class Pipeline:
         all_results = []
         all_scores = []
 
-        output_range = range(1, self.config.n_outputs + 1)
-        if self.config.n_outputs > 1:
-            output_range = tqdm(
-                output_range, desc="Generating outputs", unit="output"
-            )
+        # Calculate total steps for unified progress bar
+        total_steps = self.config.n_outputs * self.config.n_iterations
+        pbar = None
+        if total_steps > 1:
+            pbar = tqdm(total=total_steps, desc="Progress", unit="step")
 
-        for output_idx in output_range:
-            logger.info(
-                f"Generating output {output_idx}/{self.config.n_outputs}"
-            )
-
-            result = self._run_single_output(
-                input_pdb=input_pdb,
-                design_spec=design_spec,
-                design_all=design_all,
-                input_format=input_format,
-            )
-
-            # Format output path
-            out_path = format_output_path(
-                output_pdb, output_idx, self.config.n_outputs
-            )
-
-            # Convert to target format if needed and save
-            final_structure = result["final_pdb"]
-            if target_format != StructureFormat.PDB:
-                final_structure = convert_to_format(
-                    final_structure, target_format
-                )
-            save_pdb_string(final_structure, out_path)
-
-            result["output_path"] = out_path
-            all_results.append(result)
-
-            # Collect scores
-            score_dict = {
-                "total_score": result.get("final_energy", 0.0),
-                "openmm_energy": result.get("final_energy", 0.0),
-            }
-
-            # Add energy breakdown if available
-            if "energy_breakdown" in result:
-                for key, val in result["energy_breakdown"].items():
-                    if key != "total_energy":
-                        score_dict[key] = val
-
-            # Add LigandMPNN score
-            if "ligandmpnn_loss" in result:
-                score_dict["ligandmpnn_score"] = compute_ligandmpnn_score(
-                    result["ligandmpnn_loss"]
+        try:
+            for output_idx in range(1, self.config.n_outputs + 1):
+                logger.info(
+                    f"Generating output {output_idx}/{self.config.n_outputs}"
                 )
 
-            # Add sequence recovery
-            if result.get("sequence") and result.get("native_sequence"):
-                score_dict["seq_recovery"] = compute_sequence_recovery(
-                    result["sequence"], result["native_sequence"]
+                result = self._run_single_output(
+                    input_pdb=input_pdb,
+                    design_spec=design_spec,
+                    design_all=design_all,
+                    input_format=input_format,
+                    output_idx=output_idx,
+                    pbar=pbar,
                 )
 
-            score_dict["description"] = out_path.name
-            all_scores.append(score_dict)
+                # Format output path
+                out_path = format_output_path(
+                    output_pdb, output_idx, self.config.n_outputs
+                )
+
+                # Convert to target format if needed and save
+                final_structure = result["final_pdb"]
+                if target_format != StructureFormat.PDB:
+                    final_structure = convert_to_format(
+                        final_structure, target_format
+                    )
+                save_pdb_string(final_structure, out_path)
+
+                result["output_path"] = out_path
+                all_results.append(result)
+
+                # Collect scores
+                score_dict = {
+                    "total_score": result.get("final_energy", 0.0),
+                    "openmm_energy": result.get("final_energy", 0.0),
+                }
+
+                # Add energy breakdown if available
+                if "energy_breakdown" in result:
+                    for key, val in result["energy_breakdown"].items():
+                        if key != "total_energy":
+                            score_dict[key] = val
+
+                # Add LigandMPNN score
+                if "ligandmpnn_loss" in result:
+                    score_dict["ligandmpnn_score"] = compute_ligandmpnn_score(
+                        result["ligandmpnn_loss"]
+                    )
+
+                # Add sequence recovery
+                if result.get("sequence") and result.get("native_sequence"):
+                    score_dict["seq_recovery"] = compute_sequence_recovery(
+                        result["sequence"], result["native_sequence"]
+                    )
+
+                score_dict["description"] = out_path.name
+                all_scores.append(score_dict)
+        finally:
+            if pbar:
+                pbar.close()
 
         # Write scorefile if requested
         if self.config.scorefile and all_scores:
@@ -170,6 +176,8 @@ class Pipeline:
         design_spec: Optional[DesignSpec],
         design_all: bool,
         input_format: StructureFormat = StructureFormat.PDB,
+        output_idx: int = 1,
+        pbar: Optional[tqdm] = None,
     ) -> dict:
         """Run pipeline for a single output."""
         result = {
@@ -218,16 +226,17 @@ class Pipeline:
         original_native_sequence = None
 
         try:
-            iteration_range = range(1, self.config.n_iterations + 1)
-            if self.config.n_iterations > 1:
-                iteration_range = tqdm(
-                    iteration_range, desc="  Iterations", unit="iter"
-                )
-
-            for iteration in iteration_range:
+            for iteration in range(1, self.config.n_iterations + 1):
                 logger.info(
                     f"  Iteration {iteration}/{self.config.n_iterations}"
                 )
+
+                # Update progress bar description
+                if pbar:
+                    pbar.set_description(
+                        f"Output {output_idx}/{self.config.n_outputs}, "
+                        f"iter {iteration}/{self.config.n_iterations}"
+                    )
 
                 iter_result = self._run_iteration(
                     pdb_path=current_pdb_path,
@@ -235,6 +244,7 @@ class Pipeline:
                     design_all=design_all,
                     iteration=iteration,
                     original_native_sequence=original_native_sequence,
+                    pbar=pbar,
                 )
                 result["iterations"].append(iter_result)
 
@@ -260,6 +270,10 @@ class Pipeline:
                         f"E_final={info['final_energy']:.2f}, "
                         f"RMSD={info['rmsd']:.3f}"
                     )
+
+                # Increment progress bar after each iteration completes
+                if pbar:
+                    pbar.update(1)
 
             # Store final results
             result["final_pdb"] = current_pdb
@@ -287,6 +301,7 @@ class Pipeline:
         design_all: bool,
         iteration: int,
         original_native_sequence: Optional[str] = None,
+        pbar: Optional[tqdm] = None,
     ) -> dict:
         """Run a single iteration of design/repack + relax."""
         iter_result = {}
@@ -295,10 +310,13 @@ class Pipeline:
         if self.config.mode in (PipelineMode.DESIGN, PipelineMode.DESIGN_ONLY):
             # Design mode
             logger.debug("    Running design...")
+            if pbar:
+                pbar.set_postfix_str("designing")
             design_result = self.designer.design(
                 pdb_path=pdb_path,
                 design_spec=design_spec,
                 design_all=design_all,
+                pbar=pbar,
             )
             pdb_string = self.designer.result_to_pdb_string(design_result)
 
@@ -319,9 +337,12 @@ class Pipeline:
         elif self.config.mode in (PipelineMode.RELAX, PipelineMode.REPACK_ONLY):
             # Repack mode
             logger.debug("    Running repack...")
+            if pbar:
+                pbar.set_postfix_str("repacking")
             repack_result = self.designer.repack(
                 pdb_path=pdb_path,
                 design_spec=design_spec,
+                pbar=pbar,
             )
             pdb_string = self.designer.result_to_pdb_string(repack_result)
 
@@ -342,7 +363,11 @@ class Pipeline:
             PipelineMode.DESIGN,
         ):
             logger.debug("    Running relaxation...")
-            relaxed_pdb, relax_info, violations = self.relaxer.relax(pdb_string)
+            if pbar:
+                pbar.set_postfix_str("relaxing")
+            relaxed_pdb, relax_info, violations = self.relaxer.relax(
+                pdb_string, pbar=pbar
+            )
 
             iter_result["output_pdb"] = relaxed_pdb
             iter_result["relax_info"] = relax_info
@@ -356,5 +381,9 @@ class Pipeline:
         else:
             # No relaxation
             iter_result["output_pdb"] = pdb_string
+
+        # Clear postfix when done with iteration
+        if pbar:
+            pbar.set_postfix_str("")
 
         return iter_result
