@@ -23,7 +23,8 @@ jobs:
 
       - name: Install formatters
         run: |
-          pip install black isort
+          # Pin versions to match .pre-commit-config.yaml
+          pip install black==25.9.0 isort==6.0.1
           npm install -g prettier
 
       - name: Black check

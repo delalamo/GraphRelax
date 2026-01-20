@@ -94,7 +94,13 @@ write_to = "src/graphrelax/_version.py"
 
 [tool.black]
 line-length = 80
+extend-exclude = '''
+(
+    /LigandMPNN/
+)
+'''
 
 [tool.isort]
 profile = "black"
 line_length = 80
+skip_glob = ["**/LigandMPNN/**"]

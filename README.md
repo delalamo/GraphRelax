@@ -36,7 +36,7 @@ pip install -e .
 
 This installs the latest development version with all recent changes.
 
-LigandMPNN model weights (~40MB) are downloaded automatically on first run.
+LigandMPNN model weights (~40MB) are downloaded automatically on first run to `~/.graphrelax/weights/`. You can override this location by setting the `GRAPHRELAX_WEIGHTS_DIR` environment variable.
 
 ### Platform-specific Installation
 

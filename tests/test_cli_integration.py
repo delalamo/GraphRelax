@@ -5,26 +5,10 @@ These tests verify the CLI interface works correctly end-to-end.
 
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
 
-
-def weights_available():
-    """Check if LigandMPNN weights are available."""
-    weights_dir = (
-        Path(__file__).parent.parent
-        / "src"
-        / "graphrelax"
-        / "LigandMPNN"
-        / "model_params"
-    )
-    required_weights = [
-        "proteinmpnn_v_48_020.pt",
-        "ligandmpnn_v_32_010_25.pt",
-    ]
-    return all((weights_dir / w).exists() for w in required_weights)
-
+from graphrelax.weights import weights_exist as weights_available
 
 # Skip entire module if OpenMM not available
 pytest.importorskip("openmm")

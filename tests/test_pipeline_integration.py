@@ -4,8 +4,6 @@ These tests require both LigandMPNN and OpenMM to be installed.
 They test the full pipeline workflow.
 """
 
-from pathlib import Path
-
 import pytest
 
 from graphrelax.config import (
@@ -14,23 +12,7 @@ from graphrelax.config import (
     PipelineMode,
     RelaxConfig,
 )
-
-
-def weights_available():
-    """Check if LigandMPNN weights are available."""
-    weights_dir = (
-        Path(__file__).parent.parent
-        / "src"
-        / "graphrelax"
-        / "LigandMPNN"
-        / "model_params"
-    )
-    required_weights = [
-        "proteinmpnn_v_48_020.pt",
-        "ligandmpnn_v_32_010_25.pt",
-    ]
-    return all((weights_dir / w).exists() for w in required_weights)
-
+from graphrelax.weights import weights_exist as weights_available
 
 # Skip entire module if OpenMM not available
 pytest.importorskip("openmm")
