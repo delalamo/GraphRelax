@@ -8,25 +8,7 @@ import pytest
 
 from graphrelax.config import DesignConfig
 from graphrelax.resfile import DesignSpec, ResidueMode, ResidueSpec
-
-
-def weights_available():
-    """Check if LigandMPNN weights are available."""
-    from pathlib import Path
-
-    weights_dir = (
-        Path(__file__).parent.parent
-        / "src"
-        / "graphrelax"
-        / "LigandMPNN"
-        / "model_params"
-    )
-    required_weights = [
-        "proteinmpnn_v_48_020.pt",
-        "ligandmpnn_v_32_010_25.pt",
-    ]
-    return all((weights_dir / w).exists() for w in required_weights)
-
+from graphrelax.weights import weights_exist as weights_available
 
 # Skip all tests in this module if weights are not available
 pytestmark = [

@@ -27,7 +27,8 @@ RUN mamba install -y -c conda-forge python=3.11 openmm pdbfixer pytorch-cpu \
     && mamba clean -afy \
     && pip install --no-cache-dir -e .
 
-# Download model weights (~40MB total)
+# Download model weights (~40MB total) to a shared location
+ENV GRAPHRELAX_WEIGHTS_DIR=/app/weights
 RUN ./scripts/download_weights.sh
 
 # Create non-root user for security

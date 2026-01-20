@@ -11,6 +11,7 @@ import torch
 
 from graphrelax.config import DesignConfig
 from graphrelax.resfile import ALL_AAS, DesignSpec, ResidueMode
+from graphrelax.weights import find_weights_dir
 
 logger = logging.getLogger(__name__)
 
@@ -63,10 +64,9 @@ class Designer:
         if self._model is not None:
             return
 
+        weights_dir = find_weights_dir()
         checkpoint_path = (
-            LIGANDMPNN_PATH
-            / "model_params"
-            / self.CHECKPOINT_PATHS[self.config.model_type]
+            weights_dir / self.CHECKPOINT_PATHS[self.config.model_type]
         )
         logger.info(f"Loading model from {checkpoint_path}")
 
@@ -96,9 +96,8 @@ class Designer:
 
     def _load_packer(self):
         """Load side chain packer model."""
-        sc_checkpoint_path = (
-            LIGANDMPNN_PATH / "model_params" / "ligandmpnn_sc_v_32_002_16.pt"
-        )
+        weights_dir = find_weights_dir()
+        sc_checkpoint_path = weights_dir / "ligandmpnn_sc_v_32_002_16.pt"
         logger.info(f"Loading packer from {sc_checkpoint_path}")
 
         checkpoint_sc = torch.load(sc_checkpoint_path, map_location=self.device)
