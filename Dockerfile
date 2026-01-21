@@ -12,6 +12,10 @@ LABEL org.opencontainers.image.licenses="MIT"
 
 WORKDIR /app
 
+# Accept version as build argument for setuptools-scm
+ARG VERSION=0.0.0.dev0
+ENV SETUPTOOLS_SCM_PRETEND_VERSION_FOR_GRAPHRELAX=${VERSION}
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
