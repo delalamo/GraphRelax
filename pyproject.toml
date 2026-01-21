@@ -31,11 +31,10 @@ dependencies = [
     "absl-py",
     "ml-collections",
     "dm-tree",
-    "openmm",
 ]
 
-# Note: pdbfixer is not on PyPI, install via conda:
-#   conda install -c conda-forge pdbfixer
+# Note: openmm and pdbfixer are not on PyPI, install via conda:
+#   conda install -c conda-forge openmm pdbfixer
 
 [project.urls]
 Homepage = "https://github.com/delalamo/GraphRelax"
