@@ -17,13 +17,14 @@ ARG VERSION=0.0.0.dev0
 ENV SETUPTOOLS_SCM_PRETEND_VERSION_FOR_GRAPHRELAX=${VERSION}
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends curl \
+RUN apt-get update && apt-get install -y --no-install-recommends curl git \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy package files
+# Copy package files including .git for setuptools-scm version detection
 COPY pyproject.toml README.md LICENSE ./
 COPY src/ ./src/
 COPY scripts/ ./scripts/
+COPY .git/ ./.git/
 
 # Install conda dependencies and package
 # Note: openmm and pdbfixer are only available on conda-forge, not PyPI
