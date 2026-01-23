@@ -130,6 +130,23 @@ class TestEnergyBreakdown:
 
         assert "total_energy" in result
 
+    def test_get_energy_breakdown_computes_components(
+        self, relaxer, small_peptide_pdb_string
+    ):
+        """Test that energy breakdown computes all components."""
+        result = relaxer.get_energy_breakdown(small_peptide_pdb_string)
+
+        assert "bond_energy" in result or "HarmonicBondForce" in result
+        assert "angle_energy" in result or "HarmonicAngleForce" in result
+        assert "nonbonded_energy" in result or "NonbondedForce" in result
+
+        assert result["total_energy"] != 0.0
+
+        # test more than just total_energy
+        assert (
+            len(result) > 1
+        ), "Energy breakdown should have individual components"
+
 
 @pytest.mark.integration
 class TestRelaxerConfig:
