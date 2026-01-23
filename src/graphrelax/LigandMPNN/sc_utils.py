@@ -1,6 +1,7 @@
 # flake8: noqa
 # This is vendored code from LigandMPNN - style issues are preserved from upstream
 import sys
+from typing import Optional
 
 import numpy as np
 import torch
@@ -27,6 +28,7 @@ from openfold.np.residue_constants import (
 )
 from openfold.utils import feats
 from openfold.utils.rigid_utils import Rigid
+from tqdm import tqdm
 
 torch_pi = torch.tensor(np.pi, device="cpu")
 
@@ -66,6 +68,7 @@ def pack_side_chains(
     num_samples=10,
     repack_everything=True,
     num_context_atoms=16,
+    pbar: Optional[tqdm] = None,
 ):
     device = feature_dict["X"].device
     torsion_dict = make_torsion_features(feature_dict, repack_everything)
@@ -101,6 +104,7 @@ def pack_side_chains(
     feature_dict["h_V"] = h_V
     feature_dict["h_E"] = h_E
     feature_dict["E_idx"] = E_idx
+
     for step in range(num_denoising_steps):
         mean, concentration, mix_logits = model_sc.decode(feature_dict)
         mix = D.Categorical(logits=mix_logits)

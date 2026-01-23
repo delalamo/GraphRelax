@@ -8,6 +8,7 @@ from typing import Optional
 
 import numpy as np
 import torch
+from tqdm import tqdm
 
 from graphrelax.config import DesignConfig
 from graphrelax.resfile import ALL_AAS, DesignSpec, ResidueMode
@@ -130,6 +131,7 @@ class Designer:
         pdb_path: Path,
         design_spec: Optional[DesignSpec] = None,
         design_all: bool = False,
+        pbar: Optional[tqdm] = None,
     ) -> dict:
         """
         Run sequence design on a structure.
@@ -138,6 +140,7 @@ class Designer:
             pdb_path: Path to input PDB
             design_spec: Specification of which residues to design/fix
             design_all: If True, design all residues (full redesign)
+            pbar: Optional progress bar for status updates
 
         Returns:
             Dictionary with designed sequence, structure, and scores
@@ -214,6 +217,7 @@ class Designer:
                     self.config.sc_num_denoising_steps,
                     self.config.sc_num_samples,
                     repack_everything=False,
+                    pbar=pbar,
                 )
                 output_dict.update(sc_dict)
 
@@ -249,6 +253,7 @@ class Designer:
         self,
         pdb_path: Path,
         design_spec: Optional[DesignSpec] = None,
+        pbar: Optional[tqdm] = None,
     ) -> dict:
         """
         Repack side chains without changing sequence.
@@ -256,6 +261,7 @@ class Designer:
         Args:
             pdb_path: Path to input PDB
             design_spec: Specification (NATRO residues excluded from repacking)
+            pbar: Optional progress bar for status updates
 
         Returns:
             Dictionary with repacked structure
@@ -299,6 +305,7 @@ class Designer:
                 self.config.sc_num_denoising_steps,
                 self.config.sc_num_samples,
                 repack_everything=True,
+                pbar=pbar,
             )
 
         # Get sequence

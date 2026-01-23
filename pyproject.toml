@@ -32,6 +32,7 @@ dependencies = [
     "ml-collections",
     "dm-tree",
     "openmm",
+    "tqdm",
 ]
 
 # Note: pdbfixer is not on PyPI, install via conda:

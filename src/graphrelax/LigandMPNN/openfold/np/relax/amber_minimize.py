@@ -30,6 +30,7 @@ from openfold.np import (
     residue_constants,
 )
 from openfold.np.relax import cleanup, utils
+from tqdm import tqdm
 
 try:
     from simtk import openmm, unit
@@ -487,11 +488,14 @@ def _run_one_iteration(
     start = time.perf_counter()
     minimized = False
     attempts = 0
+
     while not minimized and attempts < max_attempts:
         attempts += 1
         try:
             logging.info(
-                "Minimizing protein, attempt %d of %d.", attempts, max_attempts
+                "Minimizing protein, attempt %d of %d.",
+                attempts,
+                max_attempts,
             )
             ret = _openmm_minimize(
                 pdb_string,
@@ -506,6 +510,7 @@ def _run_one_iteration(
         except Exception as e:  # pylint: disable=broad-except
             print(e)
             logging.info(e)
+
     if not minimized:
         raise ValueError(f"Minimization failed after {max_attempts} attempts.")
     ret["opt_time"] = time.perf_counter() - start
@@ -525,6 +530,7 @@ def run_pipeline(
     max_attempts: int = 100,
     checks: bool = True,
     exclude_residues: Optional[Sequence[int]] = None,
+    pbar: Optional[tqdm] = None,
 ):
     """Run iterative amber relax.
 
@@ -548,6 +554,7 @@ def run_pipeline(
       checks: Whether to perform cleaning checks.
       exclude_residues: An optional list of zero-indexed residues to exclude from
           restraints.
+      pbar: Optional progress bar for status updates.
 
     Returns:
       out: A dictionary of output values.
@@ -607,6 +614,7 @@ def run_pipeline(
             ret["num_exclusions"],
         )
         iteration += 1
+
     return ret
 
 
