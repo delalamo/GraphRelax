@@ -12,11 +12,22 @@ from graphrelax.weights import ensure_weights
 def setup_logging(verbose: bool):
     """Configure logging."""
     level = logging.DEBUG if verbose else logging.WARNING
+
+    # Clear any existing handlers on root logger (basicConfig does nothing if
+    # handlers already exist)
+    root = logging.getLogger()
+    for handler in root.handlers[:]:
+        root.removeHandler(handler)
+
     logging.basicConfig(
         level=level,
         format="%(asctime)s [%(levelname)s] %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+
+    # Silence verbose third-party loggers
+    for logger_name in ["prody", "openmm", "simtk"]:
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
 
 
 def _check_for_ligands(input_path: Path, fmt) -> bool:
