@@ -1,15 +1,21 @@
 #!/bin/bash
 # Download LigandMPNN model weights
+#
+# By default, downloads to ~/.graphrelax/weights/
+# Override with GRAPHRELAX_WEIGHTS_DIR environment variable
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PACKAGE_DIR="$SCRIPT_DIR/../src/graphrelax/LigandMPNN"
-WEIGHTS_DIR="$PACKAGE_DIR/model_params"
+# Determine weights directory
+if [ -n "$GRAPHRELAX_WEIGHTS_DIR" ]; then
+    WEIGHTS_DIR="$GRAPHRELAX_WEIGHTS_DIR"
+else
+    WEIGHTS_DIR="$HOME/.graphrelax/weights"
+fi
 
 mkdir -p "$WEIGHTS_DIR"
 
-echo "Downloading LigandMPNN model weights..."
+echo "Downloading LigandMPNN model weights to $WEIGHTS_DIR..."
 
 # Base URL for LigandMPNN weights
 BASE_URL="https://files.ipd.uw.edu/pub/ligandmpnn"
