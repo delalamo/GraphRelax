@@ -27,7 +27,7 @@ COPY scripts/ ./scripts/
 
 # Install conda dependencies and package
 # Note: openmm and pdbfixer are only available on conda-forge, not PyPI
-RUN mamba install -y -c conda-forge python=3.11 openmm pdbfixer pytorch-cpu \
+RUN mamba install -y -c conda-forge python=3.11 openmm pdbfixer pytorch-cpu prody \
     && mamba clean -afy \
     && pip install --no-cache-dir -e .
 
