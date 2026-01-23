@@ -100,7 +100,7 @@ jobs:
           # Test LigandMPNN weights exist
           from pathlib import Path
           import os
-          weights_dir = Path(os.environ.get['GRAPHRELAX_WEIGHTS_DIR'])
+          weights_dir = Path(os.environ['GRAPHRELAX_WEIGHTS_DIR'])
           assert weights_dir.exists(), f'Weights directory not found: {weights_dir}'
           weight_files = list(weights_dir.glob('*.pt'))
           assert len(weight_files) > 0, 'No weight files found'
