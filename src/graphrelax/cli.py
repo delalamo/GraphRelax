@@ -6,8 +6,6 @@ import logging
 import sys
 from pathlib import Path
 
-from prody import confProDy
-
 from graphrelax.weights import ensure_weights
 
 
@@ -36,8 +34,11 @@ def setup_logging(verbose: bool):
             "openmm",
             "simtk",
         ]:
-            logging.getLogger(logger_name).setLevel(logging.WARNING)
-        confProDy(verbosity="none")
+            logger = logging.getLogger(logger_name)
+            logger.setLevel(logging.WARNING)
+            # Also remove any handlers the library may have added
+            for handler in logger.handlers[:]:
+                logger.removeHandler(handler)
 
 
 def _check_for_ligands(input_path: Path, fmt) -> bool:
