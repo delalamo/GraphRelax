@@ -449,7 +449,9 @@ class Relaxer:
                 # Set this force to group i
                 force.setForceGroup(i)
 
-            # Recreate simulation with force groups
+            # Recreate simulation with force groups (need new integrator since
+            # the previous one is already bound to a context)
+            integrator = openmm.LangevinIntegrator(0, 0.01, 0.0)
             simulation = openmm_app.Simulation(
                 pdb.topology, system, integrator, platform
             )
