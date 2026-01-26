@@ -2,6 +2,12 @@
 # This is vendored code from LigandMPNN - style issues are preserved from upstream
 from __future__ import print_function
 
+import logging
+
+# Silence ProDy loggers BEFORE importing prody to prevent any debug messages
+for _name in ["prody", "prody.atomic", "prody.proteins", "prody.dynamics"]:
+    logging.getLogger(_name).setLevel(logging.ERROR)
+
 import numpy as np
 import torch
 import torch.utils

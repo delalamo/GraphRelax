@@ -20,13 +20,30 @@ def setup_logging(verbose: bool):
     )
 
 
-def silence_third_party_loggers():
-    """Silence verbose third-party loggers after they've been imported."""
+def configure_third_party_loggers(verbose: bool):
+    """Configure third-party loggers after they've been imported."""
     from prody import confProDy
 
-    confProDy(verbosity="none")
-    for name in ["prody", "prody.proteins", "prody.atomic"]:
-        logging.getLogger(name).setLevel(logging.ERROR)
+    if verbose:
+        # Enable ProDy logging when verbose
+        confProDy(verbosity="debug")
+        for name in [
+            "prody",
+            "prody.proteins",
+            "prody.atomic",
+            "prody.dynamics",
+        ]:
+            logging.getLogger(name).setLevel(logging.DEBUG)
+    else:
+        # Ensure ProDy stays silent (already silenced at import, but reinforce)
+        confProDy(verbosity="none")
+        for name in [
+            "prody",
+            "prody.proteins",
+            "prody.atomic",
+            "prody.dynamics",
+        ]:
+            logging.getLogger(name).setLevel(logging.ERROR)
 
 
 def _check_for_ligands(input_path: Path, fmt) -> bool:
@@ -329,9 +346,8 @@ def main(args=None) -> int:
     from graphrelax.pipeline import Pipeline
     from graphrelax.structure_io import detect_format
 
-    # Silence third-party loggers after import (only when not verbose)
-    if not opts.verbose:
-        silence_third_party_loggers()
+    # Configure third-party loggers after import
+    configure_third_party_loggers(opts.verbose)
 
     # Determine mode
     if opts.repack_only:
