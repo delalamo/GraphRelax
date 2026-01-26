@@ -2,12 +2,18 @@
 # This is vendored code from LigandMPNN - style issues are preserved from upstream
 from __future__ import print_function
 
+import logging
+
 import numpy as np
 import torch
 import torch.utils
+
+# Completely disable all logging during prody import to suppress debug messages
+logging.disable(logging.CRITICAL)
 from prody import *
 
 confProDy(verbosity="none")
+logging.disable(logging.NOTSET)
 
 restype_1to3 = {
     "A": "ALA",

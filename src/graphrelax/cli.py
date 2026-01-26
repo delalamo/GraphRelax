@@ -16,7 +16,34 @@ def setup_logging(verbose: bool):
         level=level,
         format="%(asctime)s [%(levelname)s] %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
+        force=True,  # Override any existing configuration
     )
+
+
+def configure_third_party_loggers(verbose: bool):
+    """Configure third-party loggers after they've been imported."""
+    from prody import confProDy
+
+    if verbose:
+        # Enable ProDy logging when verbose
+        confProDy(verbosity="debug")
+        for name in [
+            "prody",
+            "prody.proteins",
+            "prody.atomic",
+            "prody.dynamics",
+        ]:
+            logging.getLogger(name).setLevel(logging.DEBUG)
+    else:
+        # Ensure ProDy stays silent (already silenced at import, but reinforce)
+        confProDy(verbosity="none")
+        for name in [
+            "prody",
+            "prody.proteins",
+            "prody.atomic",
+            "prody.dynamics",
+        ]:
+            logging.getLogger(name).setLevel(logging.ERROR)
 
 
 def _check_for_ligands(input_path: Path, fmt) -> bool:
@@ -318,6 +345,9 @@ def main(args=None) -> int:
     )
     from graphrelax.pipeline import Pipeline
     from graphrelax.structure_io import detect_format
+
+    # Configure third-party loggers after import
+    configure_third_party_loggers(opts.verbose)
 
     # Determine mode
     if opts.repack_only:

@@ -10,6 +10,7 @@ import numpy as np
 from openmm import Platform
 from openmm import app as openmm_app
 from openmm import openmm, unit
+from tqdm import tqdm
 
 from graphrelax.chain_gaps import (
     detect_chain_gaps,
@@ -54,7 +55,9 @@ class Relaxer:
         logger.info("OpenMM CUDA not available, using CPU")
         return False
 
-    def relax(self, pdb_string: str) -> Tuple[str, dict, np.ndarray]:
+    def relax(
+        self, pdb_string: str, pbar: Optional[tqdm] = None
+    ) -> Tuple[str, dict, np.ndarray]:
         """
         Relax a structure from PDB string.
 
@@ -70,6 +73,7 @@ class Relaxer:
 
         Args:
             pdb_string: PDB file contents as string
+            pbar: Optional progress bar for status updates
 
         Returns:
             Tuple of (relaxed_pdb_string, debug_info, violations)
@@ -93,7 +97,9 @@ class Relaxer:
 
         if self.config.constrained:
             prot = protein.from_pdb_string(protein_pdb)
-            relaxed_pdb, debug_info, violations = self.relax_protein(prot)
+            relaxed_pdb, debug_info, violations = self.relax_protein(
+                prot, pbar=pbar
+            )
         else:
             relaxed_pdb, debug_info, violations = self._relax_unconstrained(
                 protein_pdb
@@ -126,12 +132,15 @@ class Relaxer:
             pdb_string = f.read()
         return self.relax(pdb_string)
 
-    def relax_protein(self, prot) -> Tuple[str, dict, np.ndarray]:
+    def relax_protein(
+        self, prot, pbar: Optional[tqdm] = None
+    ) -> Tuple[str, dict, np.ndarray]:
         """
         Relax a Protein object using OpenFold's AmberRelaxation.
 
         Args:
             prot: OpenFold Protein object
+            pbar: Optional progress bar for status updates
 
         Returns:
             Tuple of (relaxed_pdb_string, debug_info, violations)
@@ -152,7 +161,9 @@ class Relaxer:
             f"stiffness={self.config.stiffness}, gpu={use_gpu})"
         )
 
-        relaxed_pdb, debug_data, violations = relaxer.process(prot=prot)
+        relaxed_pdb, debug_data, violations = relaxer.process(
+            prot=prot, pbar=pbar
+        )
 
         logger.info(
             f"Relaxation complete: E_init={debug_data['initial_energy']:.2f}, "
