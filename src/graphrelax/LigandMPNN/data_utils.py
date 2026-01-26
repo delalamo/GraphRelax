@@ -4,16 +4,16 @@ from __future__ import print_function
 
 import logging
 
-# Silence ProDy loggers BEFORE importing prody to prevent any debug messages
-for _name in ["prody", "prody.atomic", "prody.proteins", "prody.dynamics"]:
-    logging.getLogger(_name).setLevel(logging.ERROR)
-
 import numpy as np
 import torch
 import torch.utils
+
+# Completely disable all logging during prody import to suppress debug messages
+logging.disable(logging.CRITICAL)
 from prody import *
 
 confProDy(verbosity="none")
+logging.disable(logging.NOTSET)
 
 restype_1to3 = {
     "A": "ALA",
