@@ -20,6 +20,15 @@ def setup_logging(verbose: bool):
     )
 
 
+def silence_third_party_loggers():
+    """Silence verbose third-party loggers after they've been imported."""
+    from prody import confProDy
+
+    confProDy(verbosity="none")
+    for name in ["prody", "prody.proteins", "prody.atomic"]:
+        logging.getLogger(name).setLevel(logging.ERROR)
+
+
 def _check_for_ligands(input_path: Path, fmt) -> bool:
     """
     Check if input structure has ligands (non-water HETATM records).
@@ -319,6 +328,10 @@ def main(args=None) -> int:
     )
     from graphrelax.pipeline import Pipeline
     from graphrelax.structure_io import detect_format
+
+    # Silence third-party loggers after import (only when not verbose)
+    if not opts.verbose:
+        silence_third_party_loggers()
 
     # Determine mode
     if opts.repack_only:
