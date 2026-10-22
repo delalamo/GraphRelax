@@ -18,7 +18,6 @@ from graphrelax.structure_io import (
     get_output_format,
 )
 from graphrelax.utils import (
-    compute_ligandmpnn_score,
     compute_sequence_recovery,
     format_output_path,
     format_sequence_alignment,
@@ -38,7 +37,7 @@ class Pipeline:
     1. Parse input PDB and resfile
     2. For each output:
         a. For each iteration:
-            i. Run LigandMPNN design / RFD4-Proteina repacking
+            i. Run RFD4-Proteina design / repacking
             ii. Run AMBER minimization (if applicable)
     3. Output final structure(s) and scorefile
     """
@@ -131,12 +130,6 @@ class Pipeline:
                 for key, val in result["energy_breakdown"].items():
                     if key != "total_energy":
                         score_dict[key] = val
-
-            # Add LigandMPNN score
-            if "ligandmpnn_loss" in result:
-                score_dict["ligandmpnn_score"] = compute_ligandmpnn_score(
-                    result["ligandmpnn_loss"]
-                )
 
             # Add sequence recovery
             if result.get("sequence") and result.get("native_sequence"):
@@ -257,8 +250,6 @@ class Pipeline:
                     ]
                 if "energy_breakdown" in last_iter:
                     result["energy_breakdown"] = last_iter["energy_breakdown"]
-                if "ligandmpnn_loss" in last_iter:
-                    result["ligandmpnn_loss"] = last_iter["ligandmpnn_loss"]
 
         finally:
             # Clean up temp file
@@ -290,7 +281,6 @@ class Pipeline:
 
             iter_result["sequence"] = design_result["sequence"]
             iter_result["native_sequence"] = design_result["native_sequence"]
-            iter_result["ligandmpnn_loss"] = float(design_result["loss"][0])
 
             # Log sequence alignment vs original native sequence
             compare_to = (

@@ -207,8 +207,8 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# LigandMPNN model weights (downloaded via scripts/download_weights.sh)
-src/graphrelax/LigandMPNN/model_params/*.pt
+# Locally downloaded model weights
+*.pt
 
 # Auto-generated version file (setuptools-scm)
 src/graphrelax/_version.py

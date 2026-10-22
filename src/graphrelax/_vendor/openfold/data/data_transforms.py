@@ -21,10 +21,16 @@ from operator import add
 
 import numpy as np
 import torch
-from openfold.config import NUM_EXTRA_SEQ, NUM_MSA_SEQ, NUM_RES, NUM_TEMPLATES
-from openfold.np import residue_constants as rc
-from openfold.utils.rigid_utils import Rigid, Rotation
-from openfold.utils.tensor_utils import (
+
+from graphrelax._vendor.openfold.config import (
+    NUM_EXTRA_SEQ,
+    NUM_MSA_SEQ,
+    NUM_RES,
+    NUM_TEMPLATES,
+)
+from graphrelax._vendor.openfold.np import residue_constants as rc
+from graphrelax._vendor.openfold.utils.rigid_utils import Rigid, Rotation
+from graphrelax._vendor.openfold.utils.tensor_utils import (
     batched_gather,
     tensor_tree_map,
     tree_map,

@@ -97,14 +97,9 @@ jobs:
           from graphrelax.designer import Designer
           print('  graphrelax: OK')
 
-          # Test LigandMPNN weights exist
-          from pathlib import Path
-          import os
-          weights_dir = Path(os.environ['GRAPHRELAX_WEIGHTS_DIR'])
-          assert weights_dir.exists(), f'Weights directory not found: {weights_dir}'
-          weight_files = list(weights_dir.glob('*.pt'))
-          assert len(weight_files) > 0, 'No weight files found'
-          print(f'  LigandMPNN weights: OK ({len(weight_files)} files)')
+          # The CPU image needs no design model weights.
+          from graphrelax.rfd4 import RFD4Engine
+          print('  RFD4 CLI adapter: OK')
 
           print('All dependency checks passed!')
           "

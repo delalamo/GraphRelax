@@ -11,32 +11,6 @@ import pytest
 from graphrelax.structure_io import convert_pdb_to_cif
 
 
-@pytest.fixture(scope="session")
-def weights_available():
-    """
-    Check if LigandMPNN weights are available or can be downloaded.
-
-    Skips tests if weights don't exist and cannot be downloaded due to
-    network restrictions.
-    """
-    from graphrelax.weights import weights_exist
-
-    if weights_exist():
-        return True
-
-    # Try a quick connectivity check to the weights server
-    test_url = "https://files.ipd.uw.edu/pub/ligandmpnn/proteinmpnn_v_48_020.pt"
-    try:
-        # Just check if we can connect (don't download)
-        urllib.request.urlopen(test_url, timeout=5)
-        return True
-    except (urllib.error.URLError, urllib.error.HTTPError, OSError):
-        pytest.skip(
-            "LigandMPNN weights not available and cannot be downloaded. "
-            "Tests requiring weights will be skipped."
-        )
-
-
 @pytest.fixture
 def test_data_dir():
     """Return the path to the test data directory."""

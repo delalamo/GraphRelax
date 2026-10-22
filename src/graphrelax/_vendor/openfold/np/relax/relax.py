@@ -19,8 +19,9 @@
 from typing import Any, Dict, Sequence, Tuple
 
 import numpy as np
-from openfold.np import protein
-from openfold.np.relax import amber_minimize, utils
+
+from graphrelax._vendor.openfold.np import protein
+from graphrelax._vendor.openfold.np.relax import amber_minimize, utils
 
 
 class AmberRelaxation(object):

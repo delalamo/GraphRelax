@@ -19,12 +19,13 @@ import math
 from typing import Dict
 
 import numpy as np
-import openfold.np.residue_constants as rc
 import torch
 import torch.nn as nn
-from openfold.np import protein
-from openfold.utils.rigid_utils import Rigid, Rotation
-from openfold.utils.tensor_utils import (
+
+import graphrelax._vendor.openfold.np.residue_constants as rc
+from graphrelax._vendor.openfold.np import protein
+from graphrelax._vendor.openfold.utils.rigid_utils import Rigid, Rotation
+from graphrelax._vendor.openfold.utils.tensor_utils import (
     batched_gather,
     one_hot,
     tensor_tree_map,

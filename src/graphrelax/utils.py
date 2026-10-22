@@ -1,7 +1,6 @@
 """Utility functions for scoring and I/O."""
 
 import logging
-import math
 from pathlib import Path
 from typing import Optional
 
@@ -177,19 +176,6 @@ def write_scorefile(path: Path, scores: list, header: Optional[list] = None):
             f.write(row + "\n")
 
     logger.info(f"Wrote scorefile to {path}")
-
-
-def compute_ligandmpnn_score(loss: float) -> float:
-    """
-    Convert LigandMPNN loss to a confidence score.
-
-    Args:
-        loss: Average negative log probability from LigandMPNN
-
-    Returns:
-        Confidence score (exp(-loss))
-    """
-    return math.exp(-loss)
 
 
 def format_output_path(base_path: Path, index: int, n_outputs: int) -> Path:

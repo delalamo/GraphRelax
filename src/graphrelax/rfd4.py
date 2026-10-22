@@ -1,4 +1,4 @@
-"""RFD4-Proteina side-chain packing through its public generation CLI."""
+"""RFD4-Proteina fixed-backbone sequence design and side-chain packing."""
 
 import io
 import json
@@ -11,9 +11,9 @@ from typing import Optional
 import numpy as np
 from Bio.PDB import MMCIFIO, PDBIO, MMCIFParser, PDBParser, Superimposer
 from Bio.PDB.MMCIF2Dict import MMCIF2Dict
-from Bio.SeqUtils import seq1
+from Bio.SeqUtils import seq1, seq3
 
-from graphrelax.resfile import DesignSpec
+from graphrelax.resfile import ALL_AAS, DesignSpec
 
 BACKBONE = {"N", "CA", "C", "O", "OXT"}
 AMINO_ACIDS = set(
@@ -45,22 +45,49 @@ SIDECHAIN_ATOMS = {
 }
 
 
-class Repacker:
-    """Keep sequence and backbone fixed while sampling side chains.
+class RFD4Engine:
+    """Sample sequence and side chains while keeping the backbone fixed.
 
     The executable can live in a separate Python 3.12/CUDA environment via
     GRAPHRELAX_RFD4_EXECUTABLE. No RFD4 imports are needed in GraphRelax.
     """
 
-    def __init__(self, seed: Optional[int] = None):
+    def __init__(
+        self,
+        seed: Optional[int] = None,
+        tsr_k: float = 4.0,
+        tsr_sigma: float = 12.0,
+        recycle_strategy: str = "medium/flat",
+    ):
         self.seed = seed
+        self.tsr_k = tsr_k
+        self.tsr_sigma = tsr_sigma
+        self.recycle_strategy = recycle_strategy
         self._calls = 0
 
     def repack(
+        self, pdb_path: Path, design_spec: Optional[DesignSpec] = None
+    ) -> dict:
+        return self._generate(
+            pdb_path, design_spec, design=False, design_all=False
+        )
+
+    def design(
         self,
         pdb_path: Path,
         design_spec: Optional[DesignSpec] = None,
-        original_path: Optional[Path] = None,
+        design_all: bool = False,
+    ) -> dict:
+        return self._generate(
+            pdb_path, design_spec, design=True, design_all=design_all
+        )
+
+    def _generate(
+        self,
+        pdb_path: Path,
+        design_spec: Optional[DesignSpec],
+        design: bool,
+        design_all: bool,
     ) -> dict:
         structure = PDBParser(QUIET=True).get_structure("input", str(pdb_path))
         if len(structure) != 1:
@@ -81,26 +108,32 @@ class Repacker:
             ).is_repackable()
             for r in residues
         ]
-        if original_path is not None:
-            native = PDBParser(QUIET=True).get_structure(
-                "native", str(original_path)
+        allowed = []
+        for residue in residues:
+            spec = (
+                design_spec.get_spec(
+                    residue.parent.id, residue.id[1], residue.id[2].strip()
+                )
+                if design_spec is not None
+                else None
             )
-            for residue, keep in zip(residues, fixed):
-                if keep:
-                    source = native[0][residue.parent.id][residue.id]
-                    if source.resname != residue.resname:
-                        raise ValueError(
-                            "Sequence design changed a NATRO residue"
-                        )
-                    for atom in list(residue):
-                        residue.detach_child(atom.id)
-                    for atom in source:
-                        residue.add(atom.copy())
+            mutable = design and (spec.is_designable() if spec else design_all)
+            choices = (
+                (spec.get_allowed_aas() if spec else ALL_AAS.copy())
+                if mutable
+                else {seq1(residue.resname)}
+            )
+            if not choices or not choices <= ALL_AAS:
+                raise ValueError(
+                    "Designable residues need a nonempty set of "
+                    "standard amino acids"
+                )
+            allowed.append(choices)
         sequence = "".join(seq1(r.resname) for r in residues)
-        if all(fixed) and original_path is None:
+        if all(fixed):
             return {
                 "pdb_string": pdb_path.read_text(),
-                "sequence": sequence,
+                "sequence": "".join(seq1(r.resname) for r in residues),
                 "native_sequence": sequence,
             }
         for residue in residues:
@@ -133,32 +166,52 @@ class Repacker:
                 addresses[
                     (chain, int(number), code if code not in ("?", ".") else "")
                 ] = (label_chain, label_number)
-            selections = []
-            for residue, keep in zip(residues, fixed):
-                if keep:
-                    chain, number = addresses[
-                        (
-                            residue.parent.id,
-                            residue.id[1],
-                            residue.id[2].strip(),
-                        )
-                    ]
-                    selections.append(
-                        {
-                            "select": (
-                                f"chain_id == {chain!r} and res_id == {number}"
-                            )
-                        }
-                    )
+            # Start with all context fixed, then release only the requested
+            # standard-protein identities and side chains. This also preserves
+            # modified residues, waters and other non-designed context.
+            free_coordinates = []
+            free_sequence = []
             conditions = {
-                "C_SEQ": {"true": [{"select": "atom_name != ''"}]},
+                "C_SEQ": {
+                    "true": [{"select": "atom_name != ''"}],
+                    "false": free_sequence,
+                },
                 "C_CRD": {
-                    "true": [
-                        {"select": "is_protein_backbone or not is_protein"},
-                        *selections,
-                    ]
+                    "true": [{"select": "atom_name != ''"}],
+                    "false": free_coordinates,
                 },
             }
+            for residue, keep, choices in zip(residues, fixed, allowed):
+                chain, number = addresses[
+                    (residue.parent.id, residue.id[1], residue.id[2].strip())
+                ]
+                selection = {
+                    "select": f"chain_id == {chain!r} and res_id == {number}"
+                }
+                spec = (
+                    design_spec.get_spec(
+                        residue.parent.id, residue.id[1], residue.id[2].strip()
+                    )
+                    if design_spec is not None
+                    else None
+                )
+                mutable = design and (
+                    spec.is_designable() if spec else design_all
+                )
+                if not keep:
+                    free_coordinates.append(
+                        {
+                            "select": selection["select"]
+                            + " and not is_protein_backbone"
+                        }
+                    )
+                if mutable:
+                    free_sequence.append(selection)
+                    for aa in sorted(ALL_AAS - choices):
+                        name = "C_SEQ_PROB_" + seq3(aa).upper()
+                        conditions.setdefault(name, {}).setdefault(
+                            "0.0", []
+                        ).append(selection)
             spec_path = directory / "repack.json"
             spec_path.write_text(
                 json.dumps(
@@ -178,8 +231,13 @@ class Repacker:
                 executable,
                 f"inputs={spec_path}",
                 "generation=inverse_folding",
-                "recycle_strategy=medium/flat",
+                f"recycle_strategy={self.recycle_strategy}",
+                "generation.model.local_latents.simulation_step_params."
+                f"tsr_k={self.tsr_k}",
+                "generation.model.local_latents.simulation_step_params."
+                f"tsr_sigma={self.tsr_sigma}",
                 "num_replicates=1",
+                "prevalidate_inputs=true",
                 f"out_dir={directory / 'output'}",
                 "compress_outputs=false",
                 "metrics_tags=[]",
@@ -214,9 +272,12 @@ class Repacker:
                 if r.id[0] == " " and r.resname in AMINO_ACIDS
             ]
             if len(packed) != len(residues) or any(
-                a.resname != b.resname for a, b in zip(residues, packed)
+                seq1(r.resname) not in choices
+                for r, choices in zip(packed, allowed)
             ):
-                raise RuntimeError("RFD4 output changed the protein sequence")
+                raise RuntimeError(
+                    "RFD4 output violated the sequence constraints"
+                )
             # Sampling may apply a global rigid transform. Align before copying
             # side chains into the original structure, which retains all IDs,
             # backbone atoms, fixed residues and non-protein context exactly.
@@ -248,11 +309,12 @@ class Repacker:
                     if a.name not in BACKBONE and a.element != "H"
                 ]
                 if {a.name for a in sidechains} != set(
-                    SIDECHAIN_ATOMS[original.resname].split()
+                    SIDECHAIN_ATOMS[sampled.resname].split()
                 ):
                     raise RuntimeError(
                         "RFD4 output is missing side-chain atoms"
                     )
+                original.resname = sampled.resname
                 for atom in list(original):
                     if atom.name not in BACKBONE:
                         original.detach_child(atom.id)
@@ -268,6 +330,6 @@ class Repacker:
             writer.save(output)
             return {
                 "pdb_string": output.getvalue(),
-                "sequence": sequence,
+                "sequence": "".join(seq1(r.resname) for r in residues),
                 "native_sequence": sequence,
             }

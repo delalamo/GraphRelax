@@ -7,9 +7,7 @@ to prevent artificial gap closure during subsequent minimization.
 
 import io
 import logging
-import sys
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -20,6 +18,7 @@ from openmm import app as openmm_app
 from openmm import openmm, unit
 from pdbfixer import PDBFixer
 
+from graphrelax._vendor.openfold.np import residue_constants as rc
 from graphrelax.chain_gaps import (
     ChainGap,
     detect_chain_gaps,
@@ -27,13 +26,6 @@ from graphrelax.chain_gaps import (
     split_chains_at_gaps,
 )
 from graphrelax.config import IdealizeConfig
-
-# Add vendored LigandMPNN to path for OpenFold imports
-LIGANDMPNN_PATH = Path(__file__).parent / "LigandMPNN"
-if str(LIGANDMPNN_PATH) not in sys.path:
-    sys.path.insert(0, str(LIGANDMPNN_PATH))
-
-from openfold.np import residue_constants as rc  # noqa: E402
 
 logger = logging.getLogger(__name__)
 

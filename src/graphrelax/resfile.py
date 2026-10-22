@@ -66,7 +66,7 @@ class ResidueSpec:
 
     @property
     def key(self) -> str:
-        """LigandMPNN-style residue key (e.g., 'A12' or 'A12A' with icode)."""
+        """Residue key (e.g., A12 or A12A with an insertion code)."""
         return f"{self.chain}{self.resnum}{self.icode}"
 
 
@@ -76,6 +76,7 @@ class DesignSpec:
 
     residue_specs: dict  # str -> ResidueSpec
     default_mode: ResidueMode = ResidueMode.NATAA
+    default_allowed_aas: Optional[Set[str]] = None
 
     def get_spec(self, chain: str, resnum: int, icode: str = "") -> ResidueSpec:
         """Get spec for a residue, returning default if not specified."""
@@ -84,7 +85,11 @@ class DesignSpec:
             return self.residue_specs[key]
         # Return a spec with default mode
         return ResidueSpec(
-            chain=chain, resnum=resnum, icode=icode, mode=self.default_mode
+            chain=chain,
+            resnum=resnum,
+            icode=icode,
+            mode=self.default_mode,
+            allowed_aas=self.default_allowed_aas,
         )
 
     def get_designable_keys(self) -> list:
@@ -143,6 +148,7 @@ class ResfileParser:
     def _parse_lines(self, lines) -> DesignSpec:
         """Parse resfile lines."""
         default_mode = ResidueMode.NATAA
+        default_allowed_aas = None
         residue_specs = {}
         in_body = False
 
@@ -171,6 +177,11 @@ class ResfileParser:
                 cmd = tokens[0].upper()
                 if cmd in self.COMMANDS:
                     default_mode = self.COMMANDS[cmd]
+                    default_allowed_aas = (
+                        set(tokens[1].upper())
+                        if cmd in ("PIKAA", "NOTAA") and len(tokens) > 1
+                        else None
+                    )
             else:
                 # Body section - residue-specific commands
                 # Format: <resnum> <chain> <command> [args]
@@ -203,4 +214,5 @@ class ResfileParser:
         return DesignSpec(
             residue_specs=residue_specs,
             default_mode=default_mode,
+            default_allowed_aas=default_allowed_aas,
         )

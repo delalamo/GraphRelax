@@ -23,17 +23,18 @@ import ml_collections
 import numpy as np
 import torch
 import torch.nn as nn
-from openfold.np import residue_constants
-from openfold.utils import feats
-from openfold.utils.rigid_utils import Rigid, Rotation
-from openfold.utils.tensor_utils import (
+from torch.distributions.bernoulli import Bernoulli
+
+from graphrelax._vendor.openfold.np import residue_constants
+from graphrelax._vendor.openfold.utils import feats
+from graphrelax._vendor.openfold.utils.rigid_utils import Rigid, Rotation
+from graphrelax._vendor.openfold.utils.tensor_utils import (
     batched_gather,
     masked_mean,
     permute_final_dims,
     tensor_tree_map,
     tree_map,
 )
-from torch.distributions.bernoulli import Bernoulli
 
 
 def softmax_cross_entropy(logits, labels):

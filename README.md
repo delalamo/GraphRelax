@@ -1,421 +1,207 @@
 # GraphRelax
 
-A drop-in replacement for Rosetta Relax that replaces force field-guided residue repacking and design with equivalent functions from graph neural networks.
-
-GraphRelax combines **LigandMPNN** (for sequence design), **RFD4-Proteina** (for side-chain packing) with **OpenMM AMBER minimization** to reproduce Rosetta FastRelax and Design protocols.
+GraphRelax alternates **RFD4-Proteina fixed-backbone sequence design and side-chain
+packing** with **OpenMM AMBER minimization**, providing relax and design protocols
+similar to Rosetta FastRelax and Design.
 
 ## Installation
 
-GraphRelax requires pdbfixer, which is only available via conda-forge. We recommend using conda/mamba for installation.
-
-### From PyPI (Latest Release)
+Install GraphRelax and its relaxation dependencies:
 
 ```bash
-# First, install pdbfixer via conda (required)
 conda install -c conda-forge pdbfixer
-
-# Then install graphrelax from PyPI
-pip install graphrelax
-```
-
-This installs the latest stable release.
-
-### From Source (Latest Development Version)
-
-```bash
-# First, install pdbfixer via conda (required)
-conda install -c conda-forge pdbfixer
-
-# Clone the repository
 git clone https://github.com/delalamo/GraphRelax.git
 cd GraphRelax
-
-# Install in editable mode
 pip install -e .
 ```
 
-This installs the latest development version with all recent changes.
-
-LigandMPNN model weights (~40MB) are downloaded automatically on first run to `~/.graphrelax/weights/`. You can override this location by setting the `GRAPHRELAX_WEIGHTS_DIR` environment variable.
-
-### RFD4-Proteina repacking setup
-
-Repacking (including packing after sequence design) requires a separate
+Design and repacking require a separate
 [RFD4-Proteina installation](https://github.com/RosettaCommons/RFD4-Proteina#installation)
 on a supported Linux NVIDIA GPU host with Python 3.12. Follow upstream installation
 and model-weight instructions, then point GraphRelax at that environment:
 
 ```bash
 export GRAPHRELAX_RFD4_EXECUTABLE=/path/to/rfd4-env/bin/rfd4-generate
-graphrelax -i input.pdb -o packed.pdb --repack-only
 ```
 
-If `rfd4-generate` is on PATH, the variable is unnecessary. The standard GraphRelax
-Docker image does not include RFD4; provision its GPU environment separately.
-`--no-repack` does not require RFD4 or LigandMPNN weights.
+If `rfd4-generate` is on PATH, the variable is unnecessary. The executable must be
+available on the same host as GraphRelax. RFD4 manages its own model weights and
+cache; GraphRelax does not download design-model weights. `--no-repack` requires
+only the relaxation environment.
 
-The adapter uses `generation=inverse_folding`, `recycle_strategy=medium/flat`,
-fixed sequence conditioning, and fixed backbone/non-protein coordinates. NATRO
-residues are conditioned and retained. Generated coordinates are aligned back to
-the input; changed sequences/backbones or missing outputs fail explicitly.
-Original residue numbering, insertion codes, backbone and non-protein atoms are
-retained. Resolve alternate locations and supply complete N/CA/C/O backbones.
-Each packing call starts a new model process; this adds startup cost per cycle.
-`--seed` seeds successive packing calls with incrementing values.
-The former LigandMPNN `sc_num_denoising_steps` and `sc_num_samples` API settings
-have been removed; `--temperature` still controls sequence design only.
-
-### Platform-specific Installation
-
-```bash
-# CPU-only (smaller install, no GPU dependencies)
-pip install "graphrelax[cpu]"
-
-# With CUDA 11 GPU support
-pip install "graphrelax[cuda11]"
-
-# With CUDA 12 GPU support
-pip install "graphrelax[cuda12]"
-```
+GraphRelax's Python dependencies include NumPy, BioPython, OpenMM, and the
+PyTorch/absl-py/ml-collections/dm-tree utilities used by the independently licensed
+vendored OpenFold relaxation code. ProDy is not required. OpenFold resides under
+`graphrelax._vendor.openfold`; its original license headers are retained.
 
 ### Docker
 
-Run GraphRelax using Docker without installing dependencies:
-
-```bash
-# Pull the image
-docker pull ghcr.io/delalamo/graphrelax:latest
-
-# Run with input/output files
-docker run --rm -v $(pwd):/data ghcr.io/delalamo/graphrelax:latest \
-    -i /data/input.pdb -o /data/output.pdb
-
-# Design mode with 5 outputs
-docker run --rm -v $(pwd):/data ghcr.io/delalamo/graphrelax:latest \
-    -i /data/input.pdb -o /data/designed.pdb --design -n 5
-```
-
-Build locally:
+The base image provides the relaxation environment. It does not bundle RFD4's
+GPU runtime or weights. For design or repacking, provision RFD4 inside a derived
+GPU image and expose its executable using `GRAPHRELAX_RFD4_EXECUTABLE`.
 
 ```bash
 docker build -t graphrelax .
-docker run --rm graphrelax --help
+docker run --rm -v "$(pwd):/data" graphrelax \
+    -i /data/input.pdb -o /data/minimized.pdb --no-repack
 ```
-
-### Dependencies
-
-Core dependencies (installed automatically via pip):
-
-- Python >= 3.9
-- PyTorch >= 2.0
-- NumPy < 2.0 (PyTorch <2.5 is incompatible with NumPy 2.x)
-- OpenMM
-- BioPython
-- ProDy
-- dm-tree
-- absl-py
-- ml-collections
-
-Required (must be installed separately via conda):
-
-- pdbfixer (conda-forge only, not on PyPI)
 
 ## Usage
 
-### Basic Commands
+Inputs and outputs support PDB and mmCIF formats.
 
 ```bash
-# Default: repack + minimize for 5 cycles
+# Repack and minimize for five cycles (default)
 graphrelax -i input.pdb -o relaxed.pdb
 
-# Repack + minimize with 10 cycles
-graphrelax -i input.pdb -o relaxed.pdb --n-iter 10
+# Repack only; keep sequence and backbone fixed
+graphrelax -i input.pdb -o packed.pdb --repack-only
 
-# Only minimize (no repacking)
+# Minimize only; no design model needed
 graphrelax -i input.pdb -o minimized.pdb --no-repack
 
-# Only repack side chains (no minimization)
-graphrelax -i input.pdb -o repacked.pdb --repack-only
-
-# Full redesign + minimize
+# Design sequence and side chains, then minimize
 graphrelax -i input.pdb -o designed.pdb --design
 
-# Design with resfile specification
+# Generate ten all-atom designs without minimization
+graphrelax -i input.pdb -o designed.pdb --design-only -n 10
+
+# Restrict design by residue
 graphrelax -i input.pdb -o designed.pdb --design --resfile design.resfile
 
-# Generate 10 different designs
-graphrelax -i input.pdb -o designed.pdb --design -n 10
-
-# Design only (no minimization) - fast sampling
-graphrelax -i input.pdb -o designed.pdb --design-only -n 100
-
-# With scorefile output
-graphrelax -i input.pdb -o relaxed.pdb --scorefile scores.sc
-
-# Design with ligand context (requires --constrained-minimization for ligands)
-graphrelax -i complex.pdb -o designed.pdb --design --model-type ligand_mpnn --constrained-minimization
+# Design with ligand context
+graphrelax -i complex.pdb -o designed.pdb --design --constrained-minimization
 ```
 
-### Operating Modes
+| Mode                | RFD4 operation                 | Minimize |
+| ------------------- | ------------------------------ | -------- |
+| `--relax` (default) | Fixed-sequence repacking       | Yes      |
+| `--repack-only`     | Fixed-sequence repacking       | No       |
+| `--no-repack`       | None                           | Yes      |
+| `--design`          | Sequence and side-chain design | Yes      |
+| `--design-only`     | Sequence and side-chain design | No       |
 
-| Flag                | Repack | Design | Minimize |
-| ------------------- | ------ | ------ | -------- |
-| `--relax` (default) | Yes    | No     | Yes      |
-| `--repack-only`     | Yes    | No     | No       |
-| `--no-repack`       | No     | No     | Yes      |
-| `--design`          | No     | Yes    | Yes      |
-| `--design-only`     | No     | Yes    | No       |
+### Sampling controls
 
-### Minimization Modes
+All model calls use `generation=inverse_folding` to hold the input backbone fixed.
+Design generates sequence and side chains together in one call. Repacking also
+conditions on the entire input sequence. The adapter uses the public CLI and
+condition-spec interface at upstream commit
+`6fc44c060ef96d4c759bafeaa1eae1a66a5be67c`.
 
-By default, GraphRelax uses **unconstrained minimization** - a simple, bare-bones OpenMM energy minimization with no position restraints and default tolerance parameters. This is fast and works well for most use cases.
+- `--tsr-k K`: sequence sharpening strength (default `4`). Lower values raise
+  sequence sampling temperature.
+- `--tsr-sigma S`: sequence sharpening schedule parameter (default `12`).
+- `--recycle-strategy NAME`: upstream recycle preset (default `medium/flat`).
+- `--seed N`: seed the first call with N and increment for each subsequent call.
+- `--n-iter N`: number of cycles (default `5`).
+- `-n N`: number of outputs (default `1`).
 
-For more controlled minimization (AlphaFold-style), use `--constrained-minimization`:
+The old `--model-type` and `--temperature` options and their Python configuration
+fields are removed. There is no separate side-chain packing switch for design:
+RFD4 generates an all-atom structure. Each call starts a new model process, which
+adds startup cost per cycle.
 
-```bash
-# Default: unconstrained minimization (fast, no restraints)
-graphrelax -i input.pdb -o relaxed.pdb --no-repack
+The adapter checks sequence restrictions, backbone geometry, and complete standard
+side-chain heavy atoms before accepting output. It aligns generated coordinates
+into the input frame, copies the generated sequence and side chains, and retains
+original residue IDs, insertion codes, backbone coordinates, fixed residues, and
+non-protein atoms. Supply a single model with complete N/CA/C/O backbones and
+resolved alternate locations.
 
-# Constrained minimization with position restraints and violation checking
-# Note: requires pdbfixer (conda install -c conda-forge pdbfixer)
-graphrelax -i input.pdb -o relaxed.pdb --no-repack --constrained-minimization
+### Resfiles
 
-# Constrained with custom restraint stiffness
-graphrelax -i input.pdb -o relaxed.pdb --constrained-minimization --stiffness 5.0
-```
+Rosetta-style resfiles control both design and repacking:
 
-| Mode                         | Position Restraints | Violation Checking | Speed  | Requires pdbfixer |
-| ---------------------------- | ------------------- | ------------------ | ------ | ----------------- |
-| Default (unconstrained)      | No                  | No                 | Fast   | No                |
-| `--constrained-minimization` | Yes (harmonic)      | Yes                | Slower | Yes               |
-
-**Important:** When your input PDB contains ligands or other non-standard residues (HETATM records other than water), you **must** use `--constrained-minimization`. The unconstrained mode uses AMBER force field parameters which don't include templates for non-standard molecules. Constrained mode uses OpenFold's AmberRelaxation which can handle ligands properly.
-
-### Working with Ligands
-
-When designing proteins with bound ligands (e.g., heme, cofactors, small molecules), use `ligand_mpnn` model type with constrained minimization:
-
-```bash
-# Design around a ligand
-graphrelax -i protein_with_ligand.pdb -o designed.pdb \
-    --design --model-type ligand_mpnn --constrained-minimization
-
-# Repack side chains around a ligand
-graphrelax -i protein_with_ligand.pdb -o repacked.pdb \
-    --relax --model-type ligand_mpnn --constrained-minimization
-```
-
-**Note:** If you attempt to use unconstrained minimization with a PDB containing ligands, GraphRelax will exit with an error message directing you to use `--constrained-minimization`.
-
-### Pre-Idealization
-
-GraphRelax can optionally idealize backbone geometry before processing. This is useful for structures with distorted bond lengths or angles (e.g., from homology modeling or low-resolution experimental data). The idealization step:
-
-1. Corrects backbone bond lengths and angles to ideal values
-2. Preserves phi/psi/omega dihedral angles
-3. Adds missing atoms and optionally missing residues from SEQRES
-4. Runs constrained minimization to relieve local strain
-5. By default, closes chain breaks (gaps) in the structure
-
-```bash
-# Idealize before relaxation
-graphrelax -i input.pdb -o relaxed.pdb --pre-idealize
-
-# Idealize but don't add missing residues from SEQRES
-graphrelax -i input.pdb -o relaxed.pdb --pre-idealize --ignore-missing-residues
-
-# Idealize but keep chain breaks as separate chains (don't close gaps)
-graphrelax -i input.pdb -o relaxed.pdb --pre-idealize --retain-chainbreaks
-
-# Combine with design
-graphrelax -i input.pdb -o designed.pdb --pre-idealize --design
-```
-
-**Note:** Pre-idealization requires pdbfixer (`conda install -c conda-forge pdbfixer`).
-
-### Resfile Format
-
-GraphRelax supports Rosetta-style resfiles for residue-specific control:
-
-```
-# Default behavior for all residues
+```text
 NATAA
 START
-# Design positions 10-15 on chain A
 10 A ALLAA
-11 A ALLAA
-12 A ALLAA
-13 A ALLAA
-14 A ALLAA
-15 A ALLAA
-# Position 20: only allow hydrophobics
-20 A PIKAA AVILMFYW
-# Position 25: exclude cysteine and proline
-25 A NOTAA CP
-# Position 30: only polar residues
-30 A POLAR
-# Keep position 40 completely fixed
-40 A NATRO
+11 A PIKAA AVIL
+12 A NOTAA CP
+13 A POLAR
+14 A APOLAR
+20 A NATRO
 ```
 
-#### Supported Commands
-
-| Command     | Description                                      |
+| Command     | Behavior                                         |
 | ----------- | ------------------------------------------------ |
-| `NATRO`     | Fixed completely (no design, no repacking)       |
-| `NATAA`     | Repack only (same amino acid, optimize rotamers) |
-| `ALLAA`     | Design with all 20 amino acids                   |
-| `PIKAA XYZ` | Design with only specified amino acids           |
-| `NOTAA XYZ` | Design excluding specified amino acids           |
-| `POLAR`     | Design with polar residues only (DEHKNQRST)      |
-| `APOLAR`    | Design with nonpolar residues only (ACFGILMPVWY) |
+| `NATRO`     | Preserve identity and all atoms                  |
+| `NATAA`     | Preserve identity; repack side chains            |
+| `ALLAA`     | Allow all 20 standard amino acids in design mode |
+| `PIKAA XYZ` | Allow only the listed amino acids                |
+| `NOTAA XYZ` | Exclude the listed amino acids                   |
+| `POLAR`     | Allow DEHKNQRST                                  |
+| `APOLAR`    | Allow ACFGILMPVWY                                |
 
-### Command-Line Options
+In repack/relax modes, all identities remain fixed regardless of design commands.
+In design modes, a resfile overrides full redesign. Fixed identities use `C_SEQ`;
+allowed-amino-acid restrictions use `C_SEQ_PROB_<TOKEN>` exclusions. `NATRO`
+coordinates are conditioned and retained. These restrictions apply to the model
+step; subsequent AMBER minimization may move fixed residues.
 
-```
-Required:
-  -i, --input PDB       Input PDB file
-  -o, --output PDB      Output PDB file (or prefix if -n > 1)
+### Relaxation and preprocessing
 
-Mode selection:
-  --relax               Repack + minimize cycles (default)
-  --repack-only         Only repack side chains
-  --no-repack           Only minimize
-  --design              Design + minimize
-  --design-only         Only design
+Default minimization is unconstrained. `--constrained-minimization` uses OpenFold's
+AMBER relaxation with position restraints and violation checks. `--stiffness K`
+sets restraint stiffness (default `10` kcal/mol/Å²), and `--max-iterations N` limits
+minimization iterations (`0` means unlimited).
 
-Iteration and output:
-  --n-iter N            Number of cycles (default: 5)
-  -n, --n-outputs N     Number of outputs to generate (default: 1)
+Inputs containing ligands require `--constrained-minimization` when minimization
+is enabled. Ligands provide RFD4 context; relaxation extracts and restores them
+because the AMBER setup does not parameterize arbitrary ligands.
 
-Design options:
-  --resfile FILE        Rosetta-style resfile
-  --temperature T       LigandMPNN sampling temperature (default: 0.1)
-  --model-type TYPE     protein_mpnn, ligand_mpnn, or soluble_mpnn
+- `--pre-idealize`: idealize backbone geometry before processing.
+- `--ignore-missing-residues`: do not add SEQRES missing residues during idealization.
+- `--retain-chainbreaks`: retain chain breaks during idealization.
+- `--no-split-gaps`: disable chain splitting at gaps during minimization.
+- `--keep-waters`: preserve input waters (removed by default).
+- `--scorefile FILE`: write OpenMM energy terms and sequence recovery.
+- `-v`: verbose logging.
 
-Relaxation options:
-  --constrained-minimization  Use constrained minimization with position
-                              restraints (AlphaFold-style). Default is
-                              unconstrained. Requires pdbfixer.
-                              **Required when input PDB contains ligands.**
-  --stiffness K         Restraint stiffness in kcal/mol/A^2 (default: 10.0)
-                        Only applies to constrained minimization.
-  --max-iterations N    Max L-BFGS iterations, 0=unlimited (default: 0)
-
-Input preprocessing:
-  --keep-waters         Keep water molecules in input (default: removed)
-  --pre-idealize        Idealize backbone geometry before processing.
-                        Corrects bond lengths/angles while preserving
-                        dihedral angles. By default, chain breaks are closed.
-                        Requires pdbfixer.
-  --ignore-missing-residues
-                        Do not add missing residues from SEQRES during
-                        pre-idealization. By default, missing terminal and
-                        internal loop residues are added.
-  --retain-chainbreaks  Do not close chain breaks during pre-idealization.
-                        By default, chain breaks are closed by treating all
-                        segments as a single chain.
-
-Scoring:
-  --scorefile FILE      Output scorefile with energy terms
-
-General:
-  -v, --verbose         Verbose output
-  --seed N              Random seed for reproducibility
-```
-
-### Scorefile Output
-
-When `--scorefile` is specified, outputs a Rosetta-style scorefile:
-
-```
-SCORE:  total_score  openmm_energy  bond_energy  angle_energy  dihedral_energy  nonbonded_energy  ligandmpnn_score  seq_recovery  description
-SCORE:     -234.56       -234.56        12.3         45.6             23.1              -315.6             0.847          0.92   output_1.pdb
-SCORE:     -228.12       -228.12        11.8         44.2             22.8              -307.0             0.823          0.89   output_2.pdb
-```
+Scores contain physical energies when minimization runs and sequence recovery when
+design/repacking runs. The adapter does not invent a model confidence score from
+RFD4 output.
 
 ## Python API
 
 ```python
-from graphrelax import Pipeline, PipelineConfig, PipelineMode
-from graphrelax.config import DesignConfig, RelaxConfig, IdealizeConfig
 from pathlib import Path
+from graphrelax import Pipeline, PipelineConfig, PipelineMode
+from graphrelax.config import DesignConfig, RelaxConfig
 
-# Configure pipeline
-config = PipelineConfig(
+pipeline = Pipeline(PipelineConfig(
     mode=PipelineMode.DESIGN,
     n_iterations=5,
-    n_outputs=10,
-    design=DesignConfig(
-        model_type="ligand_mpnn",
-        temperature=0.1,
-    ),
-    relax=RelaxConfig(
-        stiffness=10.0,
-        constrained=False,  # Default: unconstrained minimization
-    ),
-    idealize=IdealizeConfig(
-        enabled=True,  # Enable pre-idealization
-        add_missing_residues=True,  # Add missing residues from SEQRES
-        close_chainbreaks=True,  # Close chain breaks (default)
-    ),
-)
-
-# Run pipeline
-pipeline = Pipeline(config)
-results = pipeline.run(
-    input_pdb=Path("input.pdb"),
-    output_pdb=Path("output.pdb"),
-    resfile=Path("design.resfile"),  # optional
-)
-
-# Access results
-for output in results["outputs"]:
-    print(f"Output: {output['output_path']}")
-    print(f"Sequence: {output['sequence']}")
-    print(f"Final energy: {output.get('final_energy', 'N/A')}")
+    design=DesignConfig(seed=42, tsr_k=4.0, tsr_sigma=12.0,
+                        recycle_strategy="medium/flat"),
+    relax=RelaxConfig(max_iterations=100),
+))
+results = pipeline.run(Path("input.pdb"), Path("output.pdb"),
+                       resfile=Path("design.resfile"))
 ```
 
-## How It Works
+`Designer.design()` and `Designer.repack()` return `pdb_string`, `sequence`, and
+`native_sequence`. Use `Designer.result_to_pdb_string()` to obtain the PDB text.
+No sequence log-probability arrays or design-model loss are returned.
 
-GraphRelax implements an alternating optimization protocol similar to Rosetta FastRelax:
-
-1. **Parse Input**: Read PDB structure and optional resfile
-2. **For each iteration**:
-   - **Design/Repack Phase**: Use LigandMPNN to generate sequences and RFD4-Proteina to repack side chains
-   - **Minimize Phase**: Use OpenMM with AMBER force field for energy minimization
-3. **Output**: Write final structure(s) and optional scorefile
-
-### Key Differences from Rosetta
-
-| Aspect            | Rosetta                      | GraphRelax                            |
-| ----------------- | ---------------------------- | ------------------------------------- |
-| Sequence sampling | Monte Carlo with force field | LigandMPNN neural network             |
-| Rotamer packing   | Discrete rotamer library     | RFD4-Proteina fixed-backbone sampling |
-| Energy function   | Rosetta energy function      | AMBER force field                     |
-| Speed             | Slower                       | Faster (GPU acceleration)             |
-
-## License
-
-MIT License
-
-## Citation
-
-If you use GraphRelax in your research, please cite:
-
-- LigandMPNN: Dauparas et al. (2023)
-- OpenMM: Eastman et al. (2017)
-- AlphaFold relaxation protocol: Jumper et al. (2021)
-
-### Testing the packing backend
-
-Unit tests use a simulated CLI output and do not download RFD4 weights. To validate
-actual inference on a provisioned GPU host, run:
+## Validation
 
 ```bash
-pytest -m integration tests/test_repacker.py
+pytest
+pre-commit run --all-files
+
+# Real model smoke tests on a provisioned GPU host
+pytest -m integration tests/test_rfd4.py
 ```
 
-The smoke test skips when `rfd4-generate` (or `GRAPHRELAX_RFD4_EXECUTABLE`) is absent.
-The adapter follows the upstream CLI/condition-spec interface at RFD4-Proteina
-commit `6fc44c060ef96d4c759bafeaa1eae1a66a5be67c`.
+Unit tests simulate RFD4 output to verify conditioning, restrictions, output
+validation, and pipeline behavior. The GPU smoke tests skip when the RFD4 CLI is
+absent; unit tests alone do not establish model inference or design quality.
+
+## License and references
+
+GraphRelax is MIT licensed. Vendored OpenFold code retains its Apache 2.0 notices.
+Please cite the [RFD4-Proteina project](https://github.com/RosettaCommons/RFD4-Proteina),
+OpenMM (Eastman et al., 2017), and the AlphaFold relaxation protocol (Jumper et al.,
+2021), as appropriate.

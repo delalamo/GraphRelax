@@ -1,8 +1,8 @@
 """
-GraphRelax: Combine LigandMPNN sequence design with AMBER relaxation.
+GraphRelax: Combine RFD4-Proteina sequence design with AMBER relaxation.
 
 This package provides a CLI tool that alternates between neural network-based
-sequence design/repacking (LigandMPNN) and physics-based energy minimization
+sequence design/repacking (RFD4-Proteina) and physics-based energy minimization
 (OpenMM AMBER), similar to Rosetta FastRelax and Design protocols.
 """
 

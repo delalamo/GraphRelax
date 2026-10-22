@@ -10,5 +10,5 @@ build/
 venv/
 .idea/
 .vscode/
-src/graphrelax/LigandMPNN/model_params/*.pt
+*.pt
 .DS_Store
