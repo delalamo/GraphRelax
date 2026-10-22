@@ -20,7 +20,8 @@ import io
 
 import numpy as np
 from Bio import PDB
-from openfold.np import residue_constants
+
+from graphrelax._vendor.openfold.np import residue_constants
 
 try:
     from simtk.openmm import app as openmm_app

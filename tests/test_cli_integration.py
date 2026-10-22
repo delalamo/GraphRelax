@@ -8,8 +8,6 @@ import sys
 
 import pytest
 
-from graphrelax.weights import weights_exist as weights_available
-
 # Skip entire module if OpenMM not available
 pytest.importorskip("openmm")
 
@@ -176,9 +174,7 @@ class TestCLIMutuallyExclusiveModes:
 class TestCLINoRepackMode:
     """Integration tests for CLI --no-repack mode."""
 
-    def test_no_repack_completes(
-        self, small_peptide_pdb, tmp_path, weights_available
-    ):
+    def test_no_repack_completes(self, small_peptide_pdb, tmp_path):
         """Test that --no-repack mode completes successfully."""
         output_pdb = tmp_path / "minimized.pdb"
         result = subprocess.run(
@@ -203,9 +199,7 @@ class TestCLINoRepackMode:
         assert result.returncode == 0, f"CLI failed with: {result.stderr}"
         assert output_pdb.exists()
 
-    def test_no_repack_creates_output(
-        self, small_peptide_pdb, tmp_path, weights_available
-    ):
+    def test_no_repack_creates_output(self, small_peptide_pdb, tmp_path):
         """Test that --no-repack creates valid PDB output."""
         output_pdb = tmp_path / "minimized.pdb"
         subprocess.run(
@@ -230,9 +224,7 @@ class TestCLINoRepackMode:
         content = output_pdb.read_text()
         assert "ATOM" in content
 
-    def test_no_repack_multiple_outputs(
-        self, small_peptide_pdb, tmp_path, weights_available
-    ):
+    def test_no_repack_multiple_outputs(self, small_peptide_pdb, tmp_path):
         """Test --no-repack with multiple outputs."""
         output_pdb = tmp_path / "minimized.pdb"
         result = subprocess.run(
@@ -260,9 +252,7 @@ class TestCLINoRepackMode:
         assert (tmp_path / "minimized_1.pdb").exists()
         assert (tmp_path / "minimized_2.pdb").exists()
 
-    def test_no_repack_with_scorefile(
-        self, small_peptide_pdb, tmp_path, weights_available
-    ):
+    def test_no_repack_with_scorefile(self, small_peptide_pdb, tmp_path):
         """Test --no-repack with scorefile output."""
         output_pdb = tmp_path / "minimized.pdb"
         scorefile = tmp_path / "scores.sc"
@@ -294,10 +284,7 @@ class TestCLINoRepackMode:
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(
-    not weights_available(),
-    reason="LigandMPNN weights not downloaded",
-)
+@pytest.mark.usefixtures("rfd4_available")
 class TestCLIDesignMode:
     """Integration tests for CLI --design mode (requires weights)."""
 
@@ -374,10 +361,7 @@ START
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(
-    not weights_available(),
-    reason="LigandMPNN weights not downloaded",
-)
+@pytest.mark.usefixtures("rfd4_available")
 class TestCLIRelaxMode:
     """Integration tests for CLI default relax mode (requires weights)."""
 
@@ -413,9 +397,7 @@ class TestCLIVerbosity:
     """Tests for CLI verbosity options."""
 
     @pytest.mark.integration
-    def test_verbose_output(
-        self, small_peptide_pdb, tmp_path, weights_available
-    ):
+    def test_verbose_output(self, small_peptide_pdb, tmp_path):
         """Test that -v produces more output."""
         output_pdb = tmp_path / "minimized.pdb"
         result = subprocess.run(

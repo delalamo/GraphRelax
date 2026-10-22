@@ -244,16 +244,16 @@ class TestDesignOptions:
         )
         assert args.resfile == resfile
 
-    def test_default_temperature(self, tmp_path):
-        """Test default temperature value."""
+    def test_default_tsr_k(self, tmp_path):
+        """Test default tsr_k value."""
         parser = create_parser()
         args = parser.parse_args(
             ["-i", str(tmp_path / "in.pdb"), "-o", str(tmp_path / "out.pdb")]
         )
-        assert args.temperature == 0.1
+        assert args.tsr_k == 4.0
 
-    def test_custom_temperature(self, tmp_path):
-        """Test custom temperature value."""
+    def test_custom_tsr_k(self, tmp_path):
+        """Test custom tsr_k value."""
         parser = create_parser()
         args = parser.parse_args(
             [
@@ -261,35 +261,28 @@ class TestDesignOptions:
                 str(tmp_path / "in.pdb"),
                 "-o",
                 str(tmp_path / "out.pdb"),
-                "--temperature",
+                "--tsr-k",
                 "0.5",
             ]
         )
-        assert args.temperature == 0.5
+        assert args.tsr_k == 0.5
 
-    def test_default_model_type(self, tmp_path):
-        """Test default model type."""
+    def test_sampling_schedule(self, tmp_path):
         parser = create_parser()
         args = parser.parse_args(
-            ["-i", str(tmp_path / "in.pdb"), "-o", str(tmp_path / "out.pdb")]
+            [
+                "-i",
+                str(tmp_path / "in.pdb"),
+                "-o",
+                str(tmp_path / "out.pdb"),
+                "--tsr-sigma",
+                "8",
+                "--recycle-strategy",
+                "medium/front_loaded",
+            ]
         )
-        assert args.model_type == "ligand_mpnn"
-
-    def test_model_type_choices(self, tmp_path):
-        """Test model type choices."""
-        parser = create_parser()
-        for model in ["protein_mpnn", "ligand_mpnn", "soluble_mpnn"]:
-            args = parser.parse_args(
-                [
-                    "-i",
-                    str(tmp_path / "in.pdb"),
-                    "-o",
-                    str(tmp_path / "out.pdb"),
-                    "--model-type",
-                    model,
-                ]
-            )
-            assert args.model_type == model
+        assert args.tsr_sigma == 8
+        assert args.recycle_strategy == "medium/front_loaded"
 
 
 class TestRelaxationOptions:

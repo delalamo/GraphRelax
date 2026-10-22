@@ -1,6 +1,6 @@
 """Integration tests for graphrelax.pipeline module.
 
-These tests require both LigandMPNN and OpenMM to be installed.
+These tests require both RFD4-Proteina and OpenMM to be installed.
 They test the full pipeline workflow.
 """
 
@@ -12,7 +12,6 @@ from graphrelax.config import (
     PipelineMode,
     RelaxConfig,
 )
-from graphrelax.weights import weights_exist as weights_available
 
 # Skip entire module if OpenMM not available
 pytest.importorskip("openmm")
@@ -509,15 +508,12 @@ class TestPipelineWithLigand:
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(
-    not weights_available(),
-    reason="LigandMPNN weights not downloaded",
-)
+@pytest.mark.usefixtures("rfd4_available")
 class TestPipelineDesignMode:
     """
     Tests for DESIGN mode (full sequence redesign + relaxation).
 
-    These tests require LigandMPNN weights to be available.
+    These tests require RFD4-Proteina and its weights to be available.
     """
 
     def test_design_mode_completes(self, small_peptide_pdb, tmp_path):
@@ -529,8 +525,7 @@ class TestPipelineDesignMode:
             n_iterations=1,
             n_outputs=1,
             design=DesignConfig(
-                model_type="ligand_mpnn",
-                temperature=0.1,
+                tsr_k=4.0,
                 seed=42,
             ),
             relax=RelaxConfig(max_iterations=50, stiffness=10.0),
@@ -556,8 +551,7 @@ class TestPipelineDesignMode:
             n_iterations=1,
             n_outputs=1,
             design=DesignConfig(
-                model_type="ligand_mpnn",
-                temperature=0.5,  # Higher temp for more diversity
+                tsr_k=2.0,  # Higher temp for more diversity
                 seed=42,
             ),
             relax=RelaxConfig(max_iterations=50, stiffness=10.0),
@@ -585,7 +579,7 @@ class TestPipelineDesignMode:
             mode=PipelineMode.DESIGN,
             n_iterations=1,
             n_outputs=1,
-            design=DesignConfig(model_type="ligand_mpnn", seed=42),
+            design=DesignConfig(seed=42),
             relax=RelaxConfig(max_iterations=50, stiffness=10.0),
         )
         pipeline = Pipeline(config)
@@ -620,7 +614,7 @@ START
             mode=PipelineMode.DESIGN,
             n_iterations=1,
             n_outputs=1,
-            design=DesignConfig(model_type="ligand_mpnn", seed=42),
+            design=DesignConfig(seed=42),
             relax=RelaxConfig(max_iterations=50, stiffness=10.0),
         )
         pipeline = Pipeline(config)
@@ -637,15 +631,12 @@ START
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(
-    not weights_available(),
-    reason="LigandMPNN weights not downloaded",
-)
+@pytest.mark.usefixtures("rfd4_available")
 class TestPipelineRepackMode:
     """
     Tests for RELAX mode (repack + relaxation cycles).
 
-    These tests require LigandMPNN weights to be available.
+    These tests require RFD4-Proteina and its weights to be available.
     """
 
     def test_relax_mode_completes(self, small_peptide_pdb, tmp_path):
@@ -656,7 +647,7 @@ class TestPipelineRepackMode:
             mode=PipelineMode.RELAX,
             n_iterations=2,
             n_outputs=1,
-            design=DesignConfig(model_type="ligand_mpnn", seed=42),
+            design=DesignConfig(seed=42),
             relax=RelaxConfig(max_iterations=50, stiffness=10.0),
         )
         pipeline = Pipeline(config)
@@ -678,7 +669,7 @@ class TestPipelineRepackMode:
             mode=PipelineMode.RELAX,
             n_iterations=1,
             n_outputs=1,
-            design=DesignConfig(model_type="ligand_mpnn", seed=42),
+            design=DesignConfig(seed=42),
             relax=RelaxConfig(max_iterations=50, stiffness=10.0),
         )
         pipeline = Pipeline(config)
@@ -700,7 +691,7 @@ class TestPipelineRepackMode:
             mode=PipelineMode.RELAX,
             n_iterations=3,
             n_outputs=1,
-            design=DesignConfig(model_type="ligand_mpnn", seed=42),
+            design=DesignConfig(seed=42),
             relax=RelaxConfig(max_iterations=50, stiffness=10.0),
         )
         pipeline = Pipeline(config)
@@ -715,10 +706,7 @@ class TestPipelineRepackMode:
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(
-    not weights_available(),
-    reason="LigandMPNN weights not downloaded",
-)
+@pytest.mark.usefixtures("rfd4_available")
 class TestPipelineDesignOnlyMode:
     """Tests for DESIGN_ONLY mode (design without relaxation)."""
 
@@ -730,7 +718,7 @@ class TestPipelineDesignOnlyMode:
             mode=PipelineMode.DESIGN_ONLY,
             n_iterations=1,
             n_outputs=1,
-            design=DesignConfig(model_type="ligand_mpnn", seed=42),
+            design=DesignConfig(seed=42),
         )
         pipeline = Pipeline(config)
 
@@ -751,7 +739,7 @@ class TestPipelineDesignOnlyMode:
             mode=PipelineMode.DESIGN_ONLY,
             n_iterations=1,
             n_outputs=1,
-            design=DesignConfig(model_type="ligand_mpnn", seed=42),
+            design=DesignConfig(seed=42),
         )
         pipeline = Pipeline(config)
 
@@ -770,10 +758,7 @@ class TestPipelineDesignOnlyMode:
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(
-    not weights_available(),
-    reason="LigandMPNN weights not downloaded",
-)
+@pytest.mark.usefixtures("rfd4_available")
 class TestPipelineFullWorkflow:
     """End-to-end tests for the full design+relax workflow."""
 
@@ -786,8 +771,7 @@ class TestPipelineFullWorkflow:
             n_iterations=1,
             n_outputs=1,
             design=DesignConfig(
-                model_type="ligand_mpnn",
-                temperature=0.1,
+                tsr_k=4.0,
                 seed=42,
             ),
             relax=RelaxConfig(max_iterations=100, stiffness=10.0),
@@ -819,8 +803,7 @@ class TestPipelineFullWorkflow:
             n_iterations=1,
             n_outputs=3,
             design=DesignConfig(
-                model_type="ligand_mpnn",
-                temperature=0.5,  # Higher temp for diversity
+                tsr_k=2.0,  # Higher temp for diversity
                 seed=42,
             ),
             relax=RelaxConfig(max_iterations=50, stiffness=10.0),
@@ -849,7 +832,7 @@ class TestPipelineFullWorkflow:
             n_iterations=1,
             n_outputs=2,
             scorefile=scorefile,
-            design=DesignConfig(model_type="ligand_mpnn", seed=42),
+            design=DesignConfig(seed=42),
             relax=RelaxConfig(max_iterations=50, stiffness=10.0),
         )
         pipeline = Pipeline(config)

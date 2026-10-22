@@ -1,12 +1,10 @@
 """Tests for graphrelax.utils module."""
 
-import math
 from pathlib import Path
 
 import pytest
 
 from graphrelax.utils import (
-    compute_ligandmpnn_score,
     compute_sequence_recovery,
     format_output_path,
     save_pdb_string,
@@ -92,32 +90,6 @@ class TestFormatOutputPath:
         base = Path("/tmp/output.cif")
         result = format_output_path(base, 1, 2)
         assert result.suffix == ".cif"
-
-
-class TestComputeLigandmpnnScore:
-    """Tests for compute_ligandmpnn_score function."""
-
-    def test_zero_loss(self):
-        """Test that zero loss gives score of 1.0."""
-        result = compute_ligandmpnn_score(0.0)
-        assert result == 1.0
-
-    def test_positive_loss(self):
-        """Test positive loss values."""
-        result = compute_ligandmpnn_score(1.0)
-        assert result == pytest.approx(math.exp(-1.0))
-
-    def test_large_loss(self):
-        """Test large loss gives small score."""
-        result = compute_ligandmpnn_score(10.0)
-        assert result == pytest.approx(math.exp(-10.0))
-        assert result < 0.001
-
-    def test_small_loss(self):
-        """Test small loss gives score close to 1.0."""
-        result = compute_ligandmpnn_score(0.1)
-        assert result == pytest.approx(math.exp(-0.1))
-        assert result > 0.9
 
 
 class TestWriteScorefile:

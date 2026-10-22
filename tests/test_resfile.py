@@ -2,6 +2,8 @@
 
 from io import StringIO
 
+import pytest
+
 from graphrelax.resfile import (
     ALL_AAS,
     APOLAR_AAS,
@@ -386,3 +388,12 @@ class TestResfileParser:
 
         assert isinstance(result, DesignSpec)
         assert result.default_mode == ResidueMode.NATAA
+
+
+@pytest.mark.parametrize(
+    "command,allowed",
+    [("PIKAA AC", {"A", "C"}), ("NOTAA CP", ALL_AAS - {"C", "P"})],
+)
+def test_header_amino_acid_restrictions(command, allowed):
+    parsed = ResfileParser().parse(StringIO(command + "\nSTART\n"))
+    assert parsed.get_spec("A", 1).get_allowed_aas() == allowed

@@ -1,12 +1,10 @@
 #!/usr/bin/env python
-"""GraphRelax CLI - Combine LigandMPNN design with AMBER relaxation."""
+"""GraphRelax CLI - Combine RFD4-Proteina design with AMBER relaxation."""
 
 import argparse
 import logging
 import sys
 from pathlib import Path
-
-from graphrelax.weights import ensure_weights
 
 
 def setup_logging(verbose: bool):
@@ -63,9 +61,9 @@ def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="graphrelax",
         description=(
-            "GraphRelax: Combine LigandMPNN design with AMBER relaxation.\n\n"
+            "GraphRelax: RFD4-Proteina design with AMBER relaxation.\n\n"
             "This tool alternates between neural network-based design/repacking"
-            " (LigandMPNN) and physics-based energy minimization (OpenMM AMBER)"
+            " (RFD4-Proteina) and energy minimization (OpenMM AMBER)"
             ", similar to Rosetta FastRelax and Design protocols."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -167,17 +165,21 @@ Examples:
         help="Rosetta-style resfile for residue-specific design control",
     )
     design_group.add_argument(
-        "--temperature",
+        "--tsr-k",
         type=float,
-        default=0.1,
-        metavar="T",
-        help="Sampling temperature for LigandMPNN (default: 0.1)",
+        default=4.0,
+        help="RFD4 sequence sharpening strength; lower is warmer (default: 4)",
     )
     design_group.add_argument(
-        "--model-type",
-        choices=["protein_mpnn", "ligand_mpnn", "soluble_mpnn"],
-        default="ligand_mpnn",
-        help="LigandMPNN model variant (default: ligand_mpnn)",
+        "--tsr-sigma",
+        type=float,
+        default=12.0,
+        help="RFD4 sequence sharpening schedule parameter (default: 12)",
+    )
+    design_group.add_argument(
+        "--recycle-strategy",
+        default="medium/flat",
+        help="RFD4 recycle strategy (default: medium/flat)",
     )
 
     # Relaxation options
@@ -223,7 +225,7 @@ Examples:
         "--scorefile",
         type=Path,
         metavar="FILE",
-        help="Output scorefile with OpenMM energy terms and LigandMPNN scores",
+        help="Output scorefile with OpenMM energy terms and sequence recovery",
     )
 
     # Input preprocessing options
@@ -305,9 +307,6 @@ def main(args=None) -> int:
         )
         return 1
 
-    # Ensure model weights are downloaded
-    ensure_weights(verbose=opts.verbose)
-
     # Import here to avoid slow startup from heavy dependencies
     from graphrelax.config import (
         DesignConfig,
@@ -335,7 +334,7 @@ def main(args=None) -> int:
     input_format = detect_format(opts.input)
     has_ligands = _check_for_ligands(opts.input, input_format)
 
-    # Validate: ligand_mpnn with ligands requires constrained minimization
+    # Validate: Inputs with ligands requires constrained minimization
     uses_relaxation = mode in (
         PipelineMode.RELAX,
         PipelineMode.NO_REPACK,
@@ -356,8 +355,9 @@ def main(args=None) -> int:
 
     # Build configuration
     design_config = DesignConfig(
-        model_type=opts.model_type,
-        temperature=opts.temperature,
+        tsr_k=opts.tsr_k,
+        tsr_sigma=opts.tsr_sigma,
+        recycle_strategy=opts.recycle_strategy,
         seed=opts.seed,
     )
 

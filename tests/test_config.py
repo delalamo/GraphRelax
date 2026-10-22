@@ -32,32 +32,22 @@ class TestDesignConfig:
     def test_default_values(self):
         """Test default configuration values."""
         config = DesignConfig()
-        assert config.model_type == "ligand_mpnn"
-        assert config.temperature == 0.1
-        assert config.pack_side_chains is True
+        assert config.tsr_k == 4.0
+        assert config.tsr_sigma == 12.0
+        assert config.recycle_strategy == "medium/flat"
         assert config.seed is None
-        assert config.use_ligand_context is True
 
     def test_custom_values(self):
-        """Test custom configuration values."""
         config = DesignConfig(
-            model_type="protein_mpnn",
-            temperature=0.5,
-            pack_side_chains=False,
+            tsr_k=2.0,
+            tsr_sigma=8.0,
+            recycle_strategy="medium/front_loaded",
             seed=42,
-            use_ligand_context=True,
         )
-        assert config.model_type == "protein_mpnn"
-        assert config.temperature == 0.5
-        assert config.pack_side_chains is False
+        assert config.tsr_k == 2.0
+        assert config.tsr_sigma == 8.0
+        assert config.recycle_strategy == "medium/front_loaded"
         assert config.seed == 42
-        assert config.use_ligand_context is True
-
-    def test_model_type_options(self):
-        """Test valid model type options."""
-        for model_type in ["protein_mpnn", "ligand_mpnn", "soluble_mpnn"]:
-            config = DesignConfig(model_type=model_type)
-            assert config.model_type == model_type
 
 
 class TestRelaxConfig:
@@ -113,10 +103,10 @@ class TestPipelineConfig:
     def test_nested_configs(self):
         """Test nested config objects."""
         config = PipelineConfig(
-            design=DesignConfig(temperature=0.5),
+            design=DesignConfig(tsr_k=2.0),
             relax=RelaxConfig(stiffness=20.0),
         )
-        assert config.design.temperature == 0.5
+        assert config.design.tsr_k == 2.0
         assert config.relax.stiffness == 20.0
 
     def test_verbose_flag(self):

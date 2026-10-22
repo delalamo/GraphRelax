@@ -23,13 +23,14 @@ from typing import Collection, Optional, Sequence
 
 import ml_collections
 import numpy as np
-import openfold.utils.loss as loss
 from absl import logging
-from openfold.np import (
+
+import graphrelax._vendor.openfold.utils.loss as loss
+from graphrelax._vendor.openfold.np import (
     protein,
     residue_constants,
 )
-from openfold.np.relax import cleanup, utils
+from graphrelax._vendor.openfold.np.relax import cleanup, utils
 
 try:
     from simtk import openmm, unit

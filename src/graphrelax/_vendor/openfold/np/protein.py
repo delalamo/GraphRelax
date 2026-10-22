@@ -24,7 +24,8 @@ from typing import Any, Mapping, Optional, Sequence
 
 import numpy as np
 from Bio import PDB
-from openfold.np import residue_constants
+
+from graphrelax._vendor.openfold.np import residue_constants
 
 FeatureDict = Mapping[str, np.ndarray]
 ModelOutput = Mapping[str, Any]  # Is a nested dict.

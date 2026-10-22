@@ -2,7 +2,6 @@
 
 import io
 import logging
-import sys
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -11,6 +10,8 @@ from openmm import Platform
 from openmm import app as openmm_app
 from openmm import openmm, unit
 
+from graphrelax._vendor.openfold.np import protein
+from graphrelax._vendor.openfold.np.relax.relax import AmberRelaxation
 from graphrelax.chain_gaps import (
     detect_chain_gaps,
     get_gap_summary,
@@ -19,15 +20,6 @@ from graphrelax.chain_gaps import (
 )
 from graphrelax.config import RelaxConfig
 from graphrelax.idealize import extract_ligands, restore_ligands
-
-# Add vendored LigandMPNN to path for OpenFold imports
-# Must happen before importing from openfold
-LIGANDMPNN_PATH = Path(__file__).parent / "LigandMPNN"
-if str(LIGANDMPNN_PATH) not in sys.path:
-    sys.path.insert(0, str(LIGANDMPNN_PATH))
-
-from openfold.np import protein  # noqa: E402
-from openfold.np.relax.relax import AmberRelaxation  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -269,7 +261,7 @@ class Relaxer:
         Direct OpenMM minimization without pdbfixer.
 
         This is a simpler approach that works for already-complete structures
-        (like those from LigandMPNN with packed side chains).
+        (like those from RFD4-Proteina with packed side chains).
 
         Args:
             pdb_string: PDB file contents as string

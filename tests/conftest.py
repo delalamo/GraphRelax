@@ -1,5 +1,7 @@
 """Shared fixtures for GraphRelax tests."""
 
+import os
+import shutil
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -7,32 +9,6 @@ from pathlib import Path
 import pytest
 
 from graphrelax.structure_io import convert_pdb_to_cif
-
-
-@pytest.fixture(scope="session")
-def weights_available():
-    """
-    Check if LigandMPNN weights are available or can be downloaded.
-
-    Skips tests if weights don't exist and cannot be downloaded due to
-    network restrictions.
-    """
-    from graphrelax.weights import weights_exist
-
-    if weights_exist():
-        return True
-
-    # Try a quick connectivity check to the weights server
-    test_url = "https://files.ipd.uw.edu/pub/ligandmpnn/proteinmpnn_v_48_020.pt"
-    try:
-        # Just check if we can connect (don't download)
-        urllib.request.urlopen(test_url, timeout=5)
-        return True
-    except (urllib.error.URLError, urllib.error.HTTPError, OSError):
-        pytest.skip(
-            "LigandMPNN weights not available and cannot be downloaded. "
-            "Tests requiring weights will be skipped."
-        )
 
 
 @pytest.fixture
@@ -136,8 +112,6 @@ def ubiquitin_pdb(tmp_path_factory):
 
     This makes it compatible with the OpenFold relaxation pipeline.
     """
-    import urllib.error
-    import urllib.request
 
     cache_dir = tmp_path_factory.mktemp("pdb_cache")
     raw_pdb_path = cache_dir / "1ubq_raw.pdb"
@@ -184,8 +158,6 @@ def ubiquitin_cif(tmp_path_factory):
 
     Same cleaning as ubiquitin_pdb but in CIF format.
     """
-    import urllib.error
-    import urllib.request
 
     from Bio.PDB import MMCIFIO, MMCIFParser, Select
 
@@ -238,8 +210,6 @@ def heme_protein_pdb(tmp_path_factory):
     This tests that the pipeline handles non-protein molecules correctly.
     The PDB is cleaned to remove waters and ions but preserves the heme.
     """
-    import urllib.error
-    import urllib.request
 
     cache_dir = tmp_path_factory.mktemp("pdb_cache")
     raw_pdb_path = cache_dir / "8vc8_raw.pdb"
@@ -278,3 +248,11 @@ def heme_protein_pdb(tmp_path_factory):
         f.writelines(clean_lines)
 
     return pdb_path
+
+
+@pytest.fixture
+def rfd4_available():
+    """GPU integration tests require an explicitly provisioned RFD4 CLI."""
+    executable = os.environ.get("GRAPHRELAX_RFD4_EXECUTABLE", "rfd4-generate")
+    if shutil.which(executable) is None:
+        pytest.skip("RFD4-Proteina GPU environment is not installed")

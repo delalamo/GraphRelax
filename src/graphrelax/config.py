@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Optional
 
 
 class PipelineMode(Enum):
@@ -16,20 +16,14 @@ class PipelineMode(Enum):
     DESIGN_ONLY = "design_only"  # Only design, no minimize
 
 
-ModelType = Literal["protein_mpnn", "ligand_mpnn", "soluble_mpnn"]
-
-
 @dataclass
 class DesignConfig:
-    """Configuration for LigandMPNN design/repacking."""
+    """RFD4-Proteina fixed-backbone sampling configuration."""
 
-    model_type: ModelType = "ligand_mpnn"
-    temperature: float = 0.1
-    pack_side_chains: bool = True
     seed: Optional[int] = None
-    use_ligand_context: bool = True
-    sc_num_denoising_steps: int = 3
-    sc_num_samples: int = 16
+    tsr_k: float = 4.0  # Lower values raise sequence sampling temperature
+    tsr_sigma: float = 12.0
+    recycle_strategy: str = "medium/flat"
 
 
 @dataclass
