@@ -2,7 +2,7 @@
 
 A drop-in replacement for Rosetta Relax that replaces force field-guided residue repacking and design with equivalent functions from graph neural networks.
 
-GraphRelax combines **LigandMPNN** (for sequence design and side-chain packing) with **OpenMM AMBER minimization** to reproduce Rosetta FastRelax and Design protocols.
+GraphRelax combines **LigandMPNN** (for sequence design), **RFD4-Proteina** (for side-chain packing) with **OpenMM AMBER minimization** to reproduce Rosetta FastRelax and Design protocols.
 
 ## Installation
 
@@ -37,6 +37,33 @@ pip install -e .
 This installs the latest development version with all recent changes.
 
 LigandMPNN model weights (~40MB) are downloaded automatically on first run to `~/.graphrelax/weights/`. You can override this location by setting the `GRAPHRELAX_WEIGHTS_DIR` environment variable.
+
+### RFD4-Proteina repacking setup
+
+Repacking (including packing after sequence design) requires a separate
+[RFD4-Proteina installation](https://github.com/RosettaCommons/RFD4-Proteina#installation)
+on a supported Linux NVIDIA GPU host with Python 3.12. Follow upstream installation
+and model-weight instructions, then point GraphRelax at that environment:
+
+```bash
+export GRAPHRELAX_RFD4_EXECUTABLE=/path/to/rfd4-env/bin/rfd4-generate
+graphrelax -i input.pdb -o packed.pdb --repack-only
+```
+
+If `rfd4-generate` is on PATH, the variable is unnecessary. The standard GraphRelax
+Docker image does not include RFD4; provision its GPU environment separately.
+`--no-repack` does not require RFD4 or LigandMPNN weights.
+
+The adapter uses `generation=inverse_folding`, `recycle_strategy=medium/flat`,
+fixed sequence conditioning, and fixed backbone/non-protein coordinates. NATRO
+residues are conditioned and retained. Generated coordinates are aligned back to
+the input; changed sequences/backbones or missing outputs fail explicitly.
+Original residue numbering, insertion codes, backbone and non-protein atoms are
+retained. Resolve alternate locations and supply complete N/CA/C/O backbones.
+Each packing call starts a new model process; this adds startup cost per cycle.
+`--seed` seeds successive packing calls with incrementing values.
+The former LigandMPNN `sc_num_denoising_steps` and `sc_num_samples` API settings
+have been removed; `--temperature` still controls sequence design only.
 
 ### Platform-specific Installation
 
@@ -355,18 +382,18 @@ GraphRelax implements an alternating optimization protocol similar to Rosetta Fa
 
 1. **Parse Input**: Read PDB structure and optional resfile
 2. **For each iteration**:
-   - **Design/Repack Phase**: Use LigandMPNN to generate sequences or repack side chains
+   - **Design/Repack Phase**: Use LigandMPNN to generate sequences and RFD4-Proteina to repack side chains
    - **Minimize Phase**: Use OpenMM with AMBER force field for energy minimization
 3. **Output**: Write final structure(s) and optional scorefile
 
 ### Key Differences from Rosetta
 
-| Aspect            | Rosetta                      | GraphRelax                     |
-| ----------------- | ---------------------------- | ------------------------------ |
-| Sequence sampling | Monte Carlo with force field | LigandMPNN neural network      |
-| Rotamer packing   | Discrete rotamer library     | LigandMPNN continuous sampling |
-| Energy function   | Rosetta energy function      | AMBER force field              |
-| Speed             | Slower                       | Faster (GPU acceleration)      |
+| Aspect            | Rosetta                      | GraphRelax                            |
+| ----------------- | ---------------------------- | ------------------------------------- |
+| Sequence sampling | Monte Carlo with force field | LigandMPNN neural network             |
+| Rotamer packing   | Discrete rotamer library     | RFD4-Proteina fixed-backbone sampling |
+| Energy function   | Rosetta energy function      | AMBER force field                     |
+| Speed             | Slower                       | Faster (GPU acceleration)             |
 
 ## License
 
@@ -379,3 +406,16 @@ If you use GraphRelax in your research, please cite:
 - LigandMPNN: Dauparas et al. (2023)
 - OpenMM: Eastman et al. (2017)
 - AlphaFold relaxation protocol: Jumper et al. (2021)
+
+### Testing the packing backend
+
+Unit tests use a simulated CLI output and do not download RFD4 weights. To validate
+actual inference on a provisioned GPU host, run:
+
+```bash
+pytest -m integration tests/test_repacker.py
+```
+
+The smoke test skips when `rfd4-generate` (or `GRAPHRELAX_RFD4_EXECUTABLE`) is absent.
+The adapter follows the upstream CLI/condition-spec interface at RFD4-Proteina
+commit `6fc44c060ef96d4c759bafeaa1eae1a66a5be67c`.

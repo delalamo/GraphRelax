@@ -298,6 +298,7 @@ class TestCLINoRepackMode:
     not weights_available(),
     reason="LigandMPNN weights not downloaded",
 )
+@pytest.mark.usefixtures("rfd4_available")
 class TestCLIDesignMode:
     """Integration tests for CLI --design mode (requires weights)."""
 
@@ -378,6 +379,7 @@ START
     not weights_available(),
     reason="LigandMPNN weights not downloaded",
 )
+@pytest.mark.usefixtures("rfd4_available")
 class TestCLIRelaxMode:
     """Integration tests for CLI default relax mode (requires weights)."""
 

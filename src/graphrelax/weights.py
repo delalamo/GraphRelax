@@ -13,7 +13,6 @@ WEIGHT_FILES = [
     "proteinmpnn_v_48_020.pt",
     "ligandmpnn_v_32_010_25.pt",
     "solublempnn_v_48_020.pt",
-    "ligandmpnn_sc_v_32_002_16.pt",
 ]
 
 

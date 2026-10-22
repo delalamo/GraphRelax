@@ -1,4 +1,4 @@
-"""LigandMPNN wrapper for sequence design and side-chain packing."""
+"""LigandMPNN sequence design with RFD4-Proteina side-chain packing."""
 
 import logging
 import sys
@@ -8,8 +8,10 @@ from typing import Optional
 
 import numpy as np
 import torch
+from prody import writePDB
 
 from graphrelax.config import DesignConfig
+from graphrelax.repacker import Repacker
 from graphrelax.resfile import ALL_AAS, DesignSpec, ResidueMode
 from graphrelax.weights import find_weights_dir
 
@@ -25,16 +27,16 @@ from data_utils import (  # noqa: E402
     featurize,
     get_score,
     parse_PDB,
+    restype_1to3,
     restype_int_to_str,
     restype_str_to_int,
     write_full_PDB,
 )
 from model_utils import ProteinMPNN  # noqa: E402
-from sc_utils import Packer, pack_side_chains  # noqa: E402
 
 
 class Designer:
-    """Wrapper for LigandMPNN design and side-chain packing."""
+    """LigandMPNN sequence design and RFD4-Proteina packing."""
 
     CHECKPOINT_PATHS = {
         "protein_mpnn": "proteinmpnn_v_48_020.pt",
@@ -48,7 +50,7 @@ class Designer:
             "cuda" if torch.cuda.is_available() else "cpu"
         )
         self._model: Optional[ProteinMPNN] = None
-        self._packer: Optional[Packer] = None
+        self._packer = Repacker(config.seed)
         self._setup_seed()
 
         logger.info(f"Designer initialized with device: {self.device}")
@@ -90,40 +92,6 @@ class Designer:
         self._model.load_state_dict(checkpoint["model_state_dict"])
         self._model.to(self.device)
         self._model.eval()
-
-        if self.config.pack_side_chains:
-            self._load_packer()
-
-    def _load_packer(self):
-        """Load side chain packer model."""
-        weights_dir = find_weights_dir()
-        sc_checkpoint_path = weights_dir / "ligandmpnn_sc_v_32_002_16.pt"
-        logger.info(f"Loading packer from {sc_checkpoint_path}")
-
-        checkpoint_sc = torch.load(sc_checkpoint_path, map_location=self.device)
-
-        self._packer = Packer(
-            node_features=128,
-            edge_features=128,
-            num_positional_embeddings=16,
-            num_chain_embeddings=16,
-            num_rbf=16,
-            hidden_dim=128,
-            num_encoder_layers=3,
-            num_decoder_layers=3,
-            atom_context_num=16,
-            lower_bound=0.0,
-            upper_bound=20.0,
-            top_k=32,
-            dropout=0.0,
-            augment_eps=0.0,
-            atom37_order=False,
-            device=self.device,
-            num_mix=3,
-        )
-        self._packer.load_state_dict(checkpoint_sc["model_state_dict"])
-        self._packer.to(self.device)
-        self._packer.eval()
 
     def design(
         self,
@@ -197,26 +165,6 @@ class Designer:
                 feature_dict["mask"] * feature_dict["chain_mask"],
             )
 
-            # Pack side chains if enabled
-            if self.config.pack_side_chains:
-                sc_feature_dict = featurize(
-                    protein_dict,
-                    cutoff_for_score=8.0,
-                    use_atom_context=True,
-                    number_of_ligand_atoms=16,
-                    model_type="ligand_mpnn",
-                )
-                sc_feature_dict["S"] = output_dict["S"]
-
-                sc_dict = pack_side_chains(
-                    sc_feature_dict,
-                    self._packer,
-                    self.config.sc_num_denoising_steps,
-                    self.config.sc_num_samples,
-                    repack_everything=False,
-                )
-                output_dict.update(sc_dict)
-
         # Extract sequence
         seq_ints = output_dict["S"][0].cpu().numpy()
         sequence = "".join([restype_int_to_str[aa] for aa in seq_ints])
@@ -227,7 +175,7 @@ class Designer:
             [restype_int_to_str[aa] for aa in native_seq_ints]
         )
 
-        return {
+        result = {
             "sequence": sequence,
             "native_sequence": native_sequence,
             "S": output_dict["S"],
@@ -244,6 +192,14 @@ class Designer:
             "feature_dict": feature_dict,
             "encoded_residues": encoded_residues,
         }
+        if self.config.pack_side_chains:
+            with tempfile.TemporaryDirectory() as tmp:
+                designed_path = Path(tmp) / "designed.pdb"
+                designed_path.write_text(self.result_to_pdb_string(result))
+                result["pdb_string"] = self._packer.repack(
+                    designed_path, design_spec, original_path=pdb_path
+                )["pdb_string"]
+        return result
 
     def repack(
         self,
@@ -260,93 +216,12 @@ class Designer:
         Returns:
             Dictionary with repacked structure
         """
-        self._load_models()
-
-        # Ensure packer is loaded (repack always needs it)
-        if self._packer is None:
-            self._load_packer()
-
-        # Parse PDB
-        protein_dict, backbone, other_atoms, icodes, _ = parse_PDB(
-            str(pdb_path),
-            device=self.device,
-            parse_all_atoms=True,
-        )
-
-        # Build residue mapping
-        encoded_residues = self._build_residue_mapping(protein_dict, icodes)
-
-        # For repacking, chain_mask = 0 (don't change sequence)
-        chain_mask = torch.zeros(len(encoded_residues), device=self.device)
-        protein_dict["chain_mask"] = chain_mask
-
-        # Featurize for packer
-        feature_dict = featurize(
-            protein_dict,
-            cutoff_for_score=8.0,
-            use_atom_context=True,
-            number_of_ligand_atoms=16,
-            model_type="ligand_mpnn",
-        )
-        # Convert S to int64 (required by one_hot in pack_side_chains)
-        feature_dict["S"] = protein_dict["S"].unsqueeze(0).long()
-
-        # Pack side chains
-        with torch.no_grad():
-            sc_dict = pack_side_chains(
-                feature_dict,
-                self._packer,
-                self.config.sc_num_denoising_steps,
-                self.config.sc_num_samples,
-                repack_everything=True,
-            )
-
-        # Get sequence
-        seq_ints = protein_dict["S"].cpu().numpy()
-        sequence = "".join([restype_int_to_str[aa] for aa in seq_ints])
-
-        # Compute score (loss) for the repacked structure
-        # For repack, we compute the score of the native sequence
-        with torch.no_grad():
-            # Get log probs from the model
-            B = 1
-            L = feature_dict["mask"].shape[1]
-            feature_dict["batch_size"] = B
-            feature_dict["temperature"] = self.config.temperature
-            feature_dict["bias"] = torch.zeros(
-                [1, L, 21], device=self.device, dtype=torch.float32
-            )
-            feature_dict["symmetry_residues"] = [[]]
-            feature_dict["symmetry_weights"] = [[]]
-            feature_dict["randn"] = torch.randn([B, L], device=self.device)
-
-            output_dict = self._model.sample(feature_dict)
-            loss, loss_per_residue = get_score(
-                feature_dict["S"],
-                output_dict["log_probs"],
-                feature_dict["mask"],
-            )
-
-        return {
-            "sequence": sequence,
-            "native_sequence": sequence,
-            "S": protein_dict["S"].unsqueeze(0),
-            "loss": loss.cpu().numpy(),
-            "loss_per_residue": loss_per_residue.cpu().numpy(),
-            "log_probs": output_dict["log_probs"],
-            "coordinates": sc_dict["X"],
-            "coord_mask": sc_dict["X_m"],
-            "b_factors": sc_dict["b_factors"],
-            "backbone": backbone,
-            "other_atoms": other_atoms,
-            "icodes": icodes,
-            "protein_dict": protein_dict,
-            "feature_dict": feature_dict,
-            "encoded_residues": encoded_residues,
-        }
+        return self._packer.repack(pdb_path, design_spec)
 
     def result_to_pdb_string(self, result: dict) -> str:
         """Convert design/repack result to PDB string."""
+        if "pdb_string" in result:
+            return result["pdb_string"]
         with tempfile.NamedTemporaryFile(suffix=".pdb", delete=False) as f:
             temp_path = f.name
 
@@ -370,20 +245,21 @@ class Designer:
                 )
             else:
                 # Backbone only - use prody
-                from data_utils import restype_1to3
-                from prody import writePDB
-
-                seq = result["sequence"]
-                seq_prody = np.array([restype_1to3[aa] for aa in seq])[
-                    None, :
-                ].repeat(4, 0)
-                result["backbone"].setResnames(seq_prody)
-                if result["other_atoms"]:
-                    writePDB(
-                        temp_path, result["backbone"] + result["other_atoms"]
+                backbone = result["backbone"].copy()
+                residue_indices = backbone.getResindices()
+                names = dict(
+                    zip(
+                        np.unique(residue_indices),
+                        [restype_1to3[aa] for aa in result["sequence"]],
                     )
+                )
+                backbone.setResnames(
+                    [names[index] for index in residue_indices]
+                )
+                if result["other_atoms"]:
+                    writePDB(temp_path, backbone + result["other_atoms"])
                 else:
-                    writePDB(temp_path, result["backbone"])
+                    writePDB(temp_path, backbone)
 
             with open(temp_path) as f:
                 pdb_string = f.read()

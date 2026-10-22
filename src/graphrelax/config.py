@@ -21,15 +21,13 @@ ModelType = Literal["protein_mpnn", "ligand_mpnn", "soluble_mpnn"]
 
 @dataclass
 class DesignConfig:
-    """Configuration for LigandMPNN design/repacking."""
+    """Configuration for LigandMPNN design and RFD4-Proteina packing."""
 
     model_type: ModelType = "ligand_mpnn"
     temperature: float = 0.1
     pack_side_chains: bool = True
     seed: Optional[int] = None
     use_ligand_context: bool = True
-    sc_num_denoising_steps: int = 3
-    sc_num_samples: int = 16
 
 
 @dataclass

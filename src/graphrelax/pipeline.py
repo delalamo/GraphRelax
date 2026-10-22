@@ -38,7 +38,7 @@ class Pipeline:
     1. Parse input PDB and resfile
     2. For each output:
         a. For each iteration:
-            i. Run design/repack with LigandMPNN (if applicable)
+            i. Run LigandMPNN design / RFD4-Proteina repacking
             ii. Run AMBER minimization (if applicable)
     3. Output final structure(s) and scorefile
     """

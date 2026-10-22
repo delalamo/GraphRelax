@@ -60,7 +60,7 @@ class TestDesignerLoading:
 
         # Models should not be loaded yet
         assert designer._model is None
-        assert designer._packer is None
+        assert designer._packer._calls == 0
 
     def test_designer_loads_model(self, designer):
         """Test that model loads on first design call."""
@@ -176,6 +176,7 @@ class TestDesignerDesign:
         assert result["sequence"] == result["native_sequence"]
 
 
+@pytest.mark.usefixtures("rfd4_available")
 class TestDesignerRepack:
     """Tests for Designer.repack() method."""
 
@@ -187,15 +188,15 @@ class TestDesignerRepack:
         # Repack should not change sequence
         assert result["sequence"] == result["native_sequence"]
 
-    def test_repack_returns_loss(self, designer, small_peptide_pdb):
-        """Test that repack returns loss information."""
+    def test_repack_returns_structure(self, designer, small_peptide_pdb):
+        """RFD4 returns a packed structure without a LigandMPNN loss."""
         result = designer.repack(pdb_path=small_peptide_pdb)
 
-        assert "loss" in result
-        loss = result["loss"].item()
-        assert loss >= 0
+        assert "ATOM" in result["pdb_string"]
+        assert "loss" not in result
 
 
+@pytest.mark.usefixtures("rfd4_available")
 class TestDesignerSideChainPacking:
     """Tests for side chain packing functionality."""
 
@@ -214,7 +215,7 @@ class TestDesignerSideChainPacking:
 
         assert "sequence" in result
         # When packing is enabled, coordinates should be updated
-        assert "coordinates" in result or "X" in result
+        assert "ATOM" in result["pdb_string"]
 
 
 class TestDesignerWithRealStructure:

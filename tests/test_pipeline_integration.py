@@ -513,6 +513,7 @@ class TestPipelineWithLigand:
     not weights_available(),
     reason="LigandMPNN weights not downloaded",
 )
+@pytest.mark.usefixtures("rfd4_available")
 class TestPipelineDesignMode:
     """
     Tests for DESIGN mode (full sequence redesign + relaxation).
@@ -641,6 +642,7 @@ START
     not weights_available(),
     reason="LigandMPNN weights not downloaded",
 )
+@pytest.mark.usefixtures("rfd4_available")
 class TestPipelineRepackMode:
     """
     Tests for RELAX mode (repack + relaxation cycles).
@@ -719,6 +721,7 @@ class TestPipelineRepackMode:
     not weights_available(),
     reason="LigandMPNN weights not downloaded",
 )
+@pytest.mark.usefixtures("rfd4_available")
 class TestPipelineDesignOnlyMode:
     """Tests for DESIGN_ONLY mode (design without relaxation)."""
 
@@ -774,6 +777,7 @@ class TestPipelineDesignOnlyMode:
     not weights_available(),
     reason="LigandMPNN weights not downloaded",
 )
+@pytest.mark.usefixtures("rfd4_available")
 class TestPipelineFullWorkflow:
     """End-to-end tests for the full design+relax workflow."""
 

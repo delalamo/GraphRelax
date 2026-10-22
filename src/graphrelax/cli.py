@@ -305,8 +305,9 @@ def main(args=None) -> int:
         )
         return 1
 
-    # Ensure model weights are downloaded
-    ensure_weights(verbose=opts.verbose)
+    # Only sequence design needs LigandMPNN weights.
+    if opts.design or opts.design_only:
+        ensure_weights(verbose=opts.verbose)
 
     # Import here to avoid slow startup from heavy dependencies
     from graphrelax.config import (

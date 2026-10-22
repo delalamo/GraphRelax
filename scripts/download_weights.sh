@@ -33,9 +33,4 @@ echo "Downloading solublempnn_v_48_020.pt..."
 curl -# -o "$WEIGHTS_DIR/solublempnn_v_48_020.pt" \
     "$BASE_URL/solublempnn_v_48_020.pt"
 
-# Download side chain packer weights
-echo "Downloading ligandmpnn_sc_v_32_002_16.pt..."
-curl -# -o "$WEIGHTS_DIR/ligandmpnn_sc_v_32_002_16.pt" \
-    "$BASE_URL/ligandmpnn_sc_v_32_002_16.pt"
-
 echo "Done! Model weights downloaded to $WEIGHTS_DIR"

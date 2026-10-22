@@ -262,11 +262,10 @@ class TestWeightFilesConstant:
         assert "proteinmpnn_v_48_020.pt" in WEIGHT_FILES
         assert "ligandmpnn_v_32_010_25.pt" in WEIGHT_FILES
         assert "solublempnn_v_48_020.pt" in WEIGHT_FILES
-        assert "ligandmpnn_sc_v_32_002_16.pt" in WEIGHT_FILES
 
     def test_count(self):
-        """Test that we have exactly 4 weight files."""
-        assert len(WEIGHT_FILES) == 4
+        """Test that we have exactly 3 sequence-model weight files."""
+        assert len(WEIGHT_FILES) == 3
 
 
 class TestBaseUrlConstant:
